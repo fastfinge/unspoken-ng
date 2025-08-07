@@ -265,6 +265,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 	def play_object(self, obj):
 		if config.conf["unspoken"]["noSounds"]:
 			return
+		if config.conf["unspoken"]["sayAll"] and SayAllHandler.isRunning():
+			return
 		curtime = time.time()
 		if curtime - self._last_played_time < 0.1 and obj is self._last_played_object:
 			return
