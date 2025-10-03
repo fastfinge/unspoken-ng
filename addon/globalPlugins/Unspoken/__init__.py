@@ -279,10 +279,15 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			desktop_max_x = desktop.location[2]
 			desktop_max_y = desktop.location[3]
 			# Get location of the object.
-			if obj.location != None:
+			if obj.location != None and obj.treeInterceptor == None:
 				# Object has a location. Get its center.
 				obj_x = obj.location[0] + (obj.location[2] / 2.0)
 				obj_y = obj.location[1] + (obj.location[3] / 2.0)
+			elif obj.treeInterceptor != None and obj.treeInterceptor.currentNVDAObject.location != None:
+				# Object is a browser object. Get its center.
+				obj_x = obj.treeInterceptor.currentNVDAObject.location[0] + (obj.treeInterceptor.currentNVDAObject.location[2] / 2.0)
+				obj_y = obj.treeInterceptor.currentNVDAObject.location[1] + (obj.treeInterceptor.currentNVDAObject.location[3] / 2.0)
+
 			else:
 				# Objects without location are assumed in the center of the screen.
 				obj_x = desktop_max_x / 2.0
