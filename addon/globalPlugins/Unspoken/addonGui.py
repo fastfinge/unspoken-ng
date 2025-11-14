@@ -149,7 +149,7 @@ class SettingsPanel(gui.settingsDialogs.SettingsPanel):
 		config.conf["unspoken"]["volumeAdjust"] = self.volumeCheckBox.IsChecked()
 
 	def update_reverb_from_config(self):
-		# Update Steam Audio reverb settings
+		# Update spatial audio reverb settings
 		try:
 			from . import steam_audio
 
