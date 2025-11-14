@@ -2,10 +2,8 @@
 # By Bryan Smart (bryansmart@bryansmart.com) and Austin Hicks (camlorn38@gmail.com)
 # Updated to use Synthizer by Mason Armstrong (mason@masonasons.me)
 
-import atexit
 import os
 import os.path
-import sys
 import time
 import threading
 import wave
@@ -21,14 +19,13 @@ import gui
 import api
 import textInfos
 import wx
-import nvwave
 from synthDriverHandler import synthChanged
 
-# Import Steam Audio
+# Import spatial audio engine
 try:
 	from . import steam_audio
 except ImportError as e:
-	log.error(f"Failed to load Steam Audio: {e}")
+	log.error(f"Failed to load spatial audio engine: {e}")
 	raise
 
 UNSPOKEN_ROOT_PATH = os.path.abspath(os.path.dirname(__file__))
@@ -111,11 +108,13 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			"DryLevel": "integer(default=30, min=0, max=100)",
 			"Width": "integer(default=100, min=0, max=100)",
 		}
-		log.debug("Initializing Steam Audio", exc_info=True)
+		log.debug("Initializing OpenAL audio engine", exc_info=True)
 		self.steam_audio = steam_audio.get_steam_audio()
-		if not self.steam_audio.initialize():
-			log.error("Failed to initialize Steam Audio")
-			raise RuntimeError("Steam Audio initialization failed")
+		if not self.steam_audio.initialize(
+			output_device=config.conf["audio"].get("outputDevice")
+		):
+			log.error("Failed to initialize OpenAL audio engine")
+			raise RuntimeError("OpenAL initialization failed")
 
 		# Configure reverb settings
 		self.steam_audio.set_reverb_settings(
@@ -127,9 +126,6 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		)
 
 		self.make_sound_objects()
-
-		# Initialize WavePlayer for audio output (stereo, 44100Hz, 16-bit)
-		self.create_wave_player()
 		# Hook to keep NVDA from announcing roles.
 		self._NVDA_getSpeechTextForProperties = speech.speech.getPropertiesSpeech
 		speech.speech.getPropertiesSpeech = self._hook_getSpeechTextForProperties
@@ -150,45 +146,44 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._display_height_magnitude = 50.0
 		synthChanged.register(self.on_synthChanged)
 
-	def create_wave_player(self):
-		self.wave_player = nvwave.WavePlayer(
-			channels=2,
-			samplesPerSec=44100,
-			bitsPerSample=16,
-			outputDevice=config.conf["audio"]["outputDevice"],
-		)
-
 	def make_sound_objects(self):
-		"""Load sound files for Steam Audio processing."""
-		log.debug("Loading sound files for Steam Audio", exc_info=True)
+		"""Load sound files for the spatial audio engine."""
+		log.debug("Loading sound files for spatial audio", exc_info=True)
 		for key, value in sound_files.items():
 			path = os.path.join(UNSPOKEN_SOUNDS_PATH, value)
 			log.debug("Loading " + path, exc_info=True)
 			try:
-				# Load WAV file and convert to float32 mono
+				# Load WAV file and convert to mono PCM bytes
 				with wave.open(path, "rb") as wav_file:
 					frames = wav_file.readframes(wav_file.getnframes())
 					sample_width = wav_file.getsampwidth()
 					channels = wav_file.getnchannels()
 					sample_rate = wav_file.getframerate()
 
-					# Convert to float32 samples
-					if sample_width == 2:  # 16-bit
-						import struct
-
-						samples = struct.unpack(f"<{len(frames) // 2}h", frames)
-						float_samples = [s / 32768.0 for s in samples]
-					else:
+					if sample_width != 2:
 						log.error(f"Unsupported sample width: {sample_width}")
 						continue
 
-					# Convert to mono if stereo
 					if channels == 2:
-						float_samples = [
-							float_samples[i] for i in range(0, len(float_samples), 2)
-						]
+						samples = struct.unpack(f"<{len(frames) // 2}h", frames)
+						mono_samples = []
+						for i in range(0, len(samples), 2):
+							try:
+								left = samples[i]
+								right = samples[i + 1]
+							except IndexError:
+								break
+							mono_samples.append(int((left + right) / 2))
+						frames = struct.pack(f"<{len(mono_samples)}h", *mono_samples)
+					elif channels != 1:
+						log.error(f"Unsupported channel count: {channels}")
+						continue
 
-					sounds[key] = {"data": float_samples, "sample_rate": sample_rate}
+					sounds[key] = {
+						"path": path,
+						"pcm_data": frames,
+						"sample_rate": sample_rate,
+					}
 
 			except Exception as e:
 				log.error(f"Failed to load {path}: {e}")
@@ -239,29 +234,6 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		volume = clamp(volume, 0.0, 1.0)
 		return volume if not config.conf["unspoken"]["HRTF"] else volume + 0.25
 
-	def _play_audio_data(self, audio_bytes):
-		"""Play processed audio data using nvwave.WavePlayer in a thread"""
-
-		def play_in_thread():
-			try:
-				self.wave_player.feed(audio_bytes)
-			except Exception as e:
-				log.error(f"Failed to play audio: {e}")
-
-		# Play audio in a separate thread to avoid blocking
-		threading.Thread(target=play_in_thread, daemon=True).start()
-
-	def _write_wav_file(self, filename, audio_bytes, sample_rate=44100):
-		"""Write audio bytes to a WAV file"""
-		try:
-			with wave.open(filename, "wb") as wav_file:
-				wav_file.setnchannels(2)  # Stereo
-				wav_file.setsampwidth(2)  # 16-bit
-				wav_file.setframerate(sample_rate)
-				wav_file.writeframes(audio_bytes)
-		except Exception as e:
-			log.error(f"Failed to write WAV file {filename}: {e}")
-
 	def play_object(self, obj):
 		if config.conf["unspoken"]["noSounds"]:
 			return
@@ -304,34 +276,22 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			# clamp these to Libaudioverse's internal ranges.
 			angle_x = clamp(angle_x, -90.0, 90.0)
 			angle_y = clamp(angle_y, -90.0, 90.0)
-			# Process audio with Steam Audio
+			# Process audio with spatial engine
 			if role in sounds:
 				sound_data = sounds[role]
-				audio_data = sound_data["data"]
-				# Adjust volume
 				volume = self._compute_volume()
-				adjusted_audio = [sample * volume for sample in audio_data]
-
-				# Process with Steam Audio for 3D positioning (without reverb)
-				processed_audio = self.steam_audio.process_sound(
-					adjusted_audio, angle_x, angle_y
+				self.steam_audio.stop_all()
+				success = self.steam_audio.play_sound(
+					role,
+					sound_data["pcm_data"],
+					sound_data["sample_rate"],
+					angle_x,
+					angle_y,
+					volume=volume,
+					enable_reverb=config.conf["unspoken"]["Reverb"],
 				)
-				if not processed_audio:
-					log.warn("Failed processing %r", role)
-					return
-
-				# Apply reverb if enabled
-				final_audio = processed_audio
-				if config.conf["unspoken"]["Reverb"]:
-					reverb_audio = self.steam_audio.apply_reverb(processed_audio)
-					if reverb_audio:
-						final_audio = reverb_audio
-					else:
-						log.warn("Failed applying reverb to %r", role)
-
-				# Play the final audio
-				self.wave_player.stop()
-				self._play_audio_data(final_audio)
+				if not success:
+					log.warn("Failed playing sound for %r", role)
 
 	def event_gainFocus(self, obj, nextHandler):
 		# Always call nextHandler first to avoid blocking navigation
@@ -371,18 +331,19 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		# Restore original hooks
 		speech.speech.getPropertiesSpeech = self._NVDA_getSpeechTextForProperties
 
-		# Close WavePlayer
-		if hasattr(self, "wave_player"):
-			try:
-				self.wave_player.close()
-			except:
-				pass
-
-		# Cleanup Steam Audio
+		# Cleanup spatial audio engine
 		if hasattr(self, "steam_audio"):
+			try:
+				self.steam_audio.stop_all()
+			except Exception:
+				pass
 			self.steam_audio.cleanup()
 		synthChanged.unregister(self.on_synthChanged)
 
 	def on_synthChanged(self):
-		self.wave_player.close()
-		self.create_wave_player()
+		try:
+			self.steam_audio.reinitialize(
+				output_device=config.conf["audio"].get("outputDevice")
+			)
+		except Exception as e:
+			log.error(f"Failed to reinitialize OpenAL: {e}")
