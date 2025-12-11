@@ -41,11 +41,94 @@ struct SteamAudioState {
 	float dry = 0.0f;
 	float width = 1.0f;
 	
+	// Simulation state
+	IPLSimulator simulator = nullptr;
+	IPLScene scene = nullptr;
+	IPLStaticMesh staticMesh = nullptr;
+	IPLSource source = nullptr;
+	IPLDirectEffect directEffect = nullptr;
+	
 	bool initialized = false;
 	bool reverbInitialized = false;
 };
 
 static SteamAudioState g_state;
+
+bool create_sim_scene(IPLContext context, IPLAudioSettings audioSettings) {
+	// Create Scene
+	IPLSceneSettings sceneSettings{};
+	sceneSettings.type = IPL_SCENETYPE_DEFAULT;
+	if (iplSceneCreate(context, &sceneSettings, &g_state.scene) != IPL_STATUS_SUCCESS) return false;
+
+	// Create Static Mesh (Simple Room)
+	// 10x10x10 room centered at origin
+	IPLVector3 vertices[] = {
+		{-5.0f, -5.0f, -5.0f}, {5.0f, -5.0f, -5.0f}, {5.0f, 5.0f, -5.0f}, {-5.0f, 5.0f, -5.0f},
+		{-5.0f, -5.0f, 5.0f}, {5.0f, -5.0f, 5.0f}, {5.0f, 5.0f, 5.0f}, {-5.0f, 5.0f, 5.0f}
+	};
+	IPLTriangle triangles[] = {
+		{{0, 1, 2}}, {{0, 2, 3}}, // Front
+		{{4, 5, 6}}, {{4, 6, 7}}, // Back
+		{{0, 1, 5}}, {{0, 5, 4}}, // Bottom
+		{{2, 3, 7}}, {{2, 7, 6}}, // Top
+		{{0, 3, 7}}, {{0, 7, 4}}, // Left
+		{{1, 2, 6}}, {{1, 6, 5}}  // Right
+	};
+	IPLint32 materialIndices[] = { 0,0,0,0,0,0,0,0,0,0,0,0 };
+	IPLMaterial material;
+	material.absorption[0] = 0.1f; material.absorption[1] = 0.1f; material.absorption[2] = 0.1f;
+	material.scattering = 0.5f;
+	material.transmission[0] = 0.1f; material.transmission[1] = 0.1f; material.transmission[2] = 0.1f;
+	IPLMaterial materials[] = { material };
+
+	IPLStaticMeshSettings meshSettings{};
+	meshSettings.numVertices = 8;
+	meshSettings.numTriangles = 12;
+	meshSettings.numMaterials = 1;
+	meshSettings.vertices = vertices;
+	meshSettings.triangles = triangles;
+	meshSettings.materialIndices = materialIndices;
+	meshSettings.materials = materials;
+
+	if (iplStaticMeshCreate(g_state.scene, &meshSettings, &g_state.staticMesh) != IPL_STATUS_SUCCESS) return false;
+	
+	iplStaticMeshAdd(g_state.staticMesh, g_state.scene);
+	iplSceneCommit(g_state.scene);
+	
+	// Create Simulator
+	IPLSimulationSettings simSettings{};
+	simSettings.sceneType = IPL_SCENETYPE_DEFAULT;
+    simSettings.maxNumOcclusionSamples = 64;
+    simSettings.maxNumRays = 4096;
+    simSettings.numDiffuseSamples = 32;
+    simSettings.maxDuration = 2.0f;
+    simSettings.maxOrder = 1;
+    simSettings.numThreads = 1;
+    simSettings.rayBatchSize = 1024;
+    simSettings.numVisSamples = 1024;
+    simSettings.samplingRate = audioSettings.samplingRate;
+    simSettings.frameSize = audioSettings.frameSize;
+
+	if (iplSimulatorCreate(context, &simSettings, &g_state.simulator) != IPL_STATUS_SUCCESS) return false;
+
+	iplSimulatorSetScene(g_state.simulator, g_state.scene);
+	iplSimulatorCommit(g_state.simulator);
+
+	// Create Source
+	IPLSourceSettings sourceSettings{};
+	sourceSettings.flags = IPL_SIMULATIONFLAGS_DIRECT; 
+	if (iplSourceCreate(g_state.simulator, &sourceSettings, &g_state.source) != IPL_STATUS_SUCCESS) return false;
+	
+	iplSourceAdd(g_state.source, g_state.simulator);
+	iplSimulatorCommit(g_state.simulator);
+
+	// Create Direct Effect
+	IPLDirectEffectSettings directSettings{};
+	directSettings.numChannels = 1; 
+	if (iplDirectEffectCreate(context, &audioSettings, &directSettings, &g_state.directEffect) != IPL_STATUS_SUCCESS) return false;
+
+	return true;
+}
 
 EXPORT bool initialize_steam_audio(int samplingrate, int framesize)
 {
@@ -119,6 +202,20 @@ EXPORT bool initialize_steam_audio(int samplingrate, int framesize)
 		return false;
 	}
 
+    // Initialize Simulation
+    if (!create_sim_scene(g_state.context, g_state.audioSettings)) {
+        // Log warning or fail? Let's fail for now to ensure we know it works.
+        // Clean up previous
+		iplAudioBufferFree(g_state.context, &g_state.reverbOutBuffer);
+		iplAudioBufferFree(g_state.context, &g_state.reverbInBuffer);
+        iplReflectionEffectRelease(&g_state.reflectionEffect);
+		iplAudioBufferFree(g_state.context, &g_state.outBuffer);
+		iplBinauralEffectRelease(&g_state.effect);
+		iplHRTFRelease(&g_state.hrtf);
+		iplContextRelease(&g_state.context);
+        return false;
+    }
+
 	g_state.reverbInitialized = true;
 	g_state.outputaudioframe.resize(2 * framesize);
 	g_state.outputInt16.resize(2 * framesize);
@@ -135,6 +232,15 @@ EXPORT void cleanup_steam_audio()
 	if (!g_state.initialized) {
 		return;
 	}
+
+    if (g_state.source) {
+        iplSourceRemove(g_state.source, g_state.simulator);
+        iplSourceRelease(&g_state.source);
+    }
+    if (g_state.simulator) iplSimulatorRelease(&g_state.simulator);
+    if (g_state.scene) iplSceneRelease(&g_state.scene);
+    if (g_state.staticMesh) iplStaticMeshRelease(&g_state.staticMesh);
+    if (g_state.directEffect) iplDirectEffectRelease(&g_state.directEffect);
 
 	if (g_state.reverbInitialized) {
 		iplAudioBufferFree(g_state.context, &g_state.reverbOutBuffer);
@@ -196,11 +302,12 @@ EXPORT bool process_sound(const float* input_buffer, int input_length, float ang
 	int16_t* outData = output;
 
 	// Treat input as Cartesian coordinates (x, y) and create normalized direction vector
-	// Steam Audio uses right-handed coordinate system: +X right, +Y up, +Z forward
+	// Steam Audio uses right-handed coordinate system: +X right, +Y up, -Z forward (usually)
+    // We map screen to a position in front of listener.
 	IPLVector3 direction;
 	direction.x = angle_x;  // X coordinate (left/right)
 	direction.y = angle_y;  // Y coordinate (up/down)
-	direction.z = 1.0f;     // Default forward distance
+	direction.z = -1.0f;    // Forward (Assuming -Z is forward)
 
 	// Normalize the direction vector
 	float length = sqrtf(direction.x * direction.x + direction.y * direction.y + direction.z * direction.z);
@@ -209,17 +316,62 @@ EXPORT bool process_sound(const float* input_buffer, int input_length, float ang
 		direction.y /= length;
 		direction.z /= length;
 	} else {
-		// Default to forward direction if coordinates are zero
 		direction.x = 0.0f;
 		direction.y = 0.0f;
-		direction.z = 1.0f;
+		direction.z = -1.0f;
 	}
+    
+    // Position source at distance
+    IPLVector3 sourcePos;
+    sourcePos.x = direction.x * 2.0f;
+    sourcePos.y = direction.y * 2.0f;
+    sourcePos.z = direction.z * 2.0f;
+
+    // Run Simulation
+    IPLSimulationInputs inputs{};
+    inputs.flags = IPL_SIMULATIONFLAGS_DIRECT;
+    inputs.directFlags = (IPLDirectSimulationFlags)(IPL_DIRECTSIMULATIONFLAGS_OCCLUSION | IPL_DIRECTSIMULATIONFLAGS_TRANSMISSION | IPL_DIRECTSIMULATIONFLAGS_DISTANCEATTENUATION);
+    inputs.source.origin = sourcePos;
+    inputs.source.ahead = {0,0,-1};
+    inputs.source.up = {0,1,0};
+    inputs.source.right = {1,0,0};
+    
+    iplSourceSetInputs(g_state.source, IPL_SIMULATIONFLAGS_DIRECT, &inputs);
+
+    IPLSimulationSharedInputs sharedInputs{};
+    sharedInputs.listener.origin = {0,0,0};
+    sharedInputs.listener.ahead = {0,0,-1};
+    sharedInputs.listener.up = {0,1,0};
+    sharedInputs.listener.right = {1,0,0};
+    
+    iplSimulatorSetSharedInputs(g_state.simulator, IPL_SIMULATIONFLAGS_DIRECT, &sharedInputs);
+
+    iplSimulatorRunDirect(g_state.simulator);
+
+    IPLSimulationOutputs outputs{};
+    iplSourceGetOutputs(g_state.source, IPL_SIMULATIONFLAGS_DIRECT, &outputs);
+    IPLDirectEffectParams directParams = outputs.direct;
 
 	for (int i = 0; i < numframes; ++i)
 	{
-		float* frameData[] = { const_cast<float*>(inData) };
-		IPLAudioBuffer inBuffer{ 1, framesize, frameData };
-
+        // Deinterleave input to reverbInBuffer (temp)
+        // Input is MONO float
+        // We put it in both channels of reverbInBuffer or just one?
+        // DirectEffect might expect mono input? 
+        // iplDirectEffectCreate numChannels=1.
+        // So we populate channel 0.
+        
+		float* frameData = const_cast<float*>(inData);
+        // Copy to temp buffer
+        std::copy(frameData, frameData + framesize, g_state.reverbInBuffer.data[0]);
+        // Also copy to channel 1? No, 1 channel effect.
+        
+        // Apply Direct Effect (Occlusion/Attenuation)
+        // Input: reverbInBuffer (1 chan), Output: reverbOutBuffer (1 chan)
+        iplDirectEffectApply(g_state.directEffect, &directParams, &g_state.reverbInBuffer, &g_state.reverbOutBuffer);
+        
+        // Now Apply Binaural Effect
+        // Input: reverbOutBuffer (1 chan), Output: g_state.outBuffer (2 chan)
 		IPLBinauralEffectParams params;
 		params.direction = direction;
 		params.interpolation = IPL_HRTFINTERPOLATION_NEAREST;
@@ -227,7 +379,7 @@ EXPORT bool process_sound(const float* input_buffer, int input_length, float ang
 		params.hrtf = g_state.hrtf;
 		params.peakDelays = nullptr;
 
-		if (iplBinauralEffectApply(g_state.effect, &params, &inBuffer, &g_state.outBuffer) != IPL_STATUS_SUCCESS) {
+		if (iplBinauralEffectApply(g_state.effect, &params, &g_state.reverbOutBuffer, &g_state.outBuffer) != IPL_STATUS_SUCCESS) {
 			delete[] output;
 			return false;
 		}
