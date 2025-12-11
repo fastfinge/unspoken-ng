@@ -332,6 +332,9 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 				# Play the final audio
 				self.wave_player.stop()
 				self._play_audio_data(final_audio)
+				self.wave_player.sync()
+				self.wave_player.idle()
+
 
 	def event_gainFocus(self, obj, nextHandler):
 		# Always call nextHandler first to avoid blocking navigation
