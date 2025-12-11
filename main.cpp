@@ -11,16 +11,13 @@
 
 #include <phonon.h>
 
-#define VERBLIB_IMPLEMENTATION
-#include "verblib.h"
-
 #ifdef _WIN32
 #define EXPORT extern "C" __declspec(dllexport)
 #else
 #define EXPORT extern "C"
 #endif
 
-// Global state for Steam Audio + Verblib
+// Global state for Steam Audio
 struct SteamAudioState {
 	IPLContext context = nullptr;
 	IPLHRTF hrtf = nullptr;
@@ -29,10 +26,22 @@ struct SteamAudioState {
 	IPLAudioBuffer outBuffer{};
 	std::vector<float> outputaudioframe;
 	std::vector<int16_t> outputInt16;
-	std::vector<float> reverbInputBuffer;
-	std::vector<float> reverbOutputBuffer;
+	
+	// Reverb state
+	IPLReflectionEffect reflectionEffect = nullptr;
+	IPLAudioBuffer reverbInBuffer{};
+	IPLAudioBuffer reverbOutBuffer{};
+	std::vector<float> reverbInputData;
+	std::vector<float> reverbOutputData;
+	
+	// Reverb settings
+	float roomSize = 0.5f;
+	float damping = 0.5f;
+	float wet = 1.0f;
+	float dry = 0.0f;
+	float width = 1.0f;
+	
 	bool initialized = false;
-	verblib reverb;
 	bool reverbInitialized = false;
 };
 
@@ -78,15 +87,45 @@ EXPORT bool initialize_steam_audio(int samplingrate, int framesize)
 		return false;
 	}
 
-	// Initialize verblib for reverb
-	if (verblib_initialize(&g_state.reverb, samplingrate, 2)) {
-		g_state.reverbInitialized = true;
-		g_state.reverbInputBuffer.resize(2 * framesize);
-		g_state.reverbOutputBuffer.resize(2 * framesize);
+	// Initialize Reflection Effect for Reverb (Parametric)
+	IPLReflectionEffectSettings reflectionSettings{};
+	reflectionSettings.type = IPL_REFLECTIONEFFECTTYPE_PARAMETRIC;
+	reflectionSettings.irSize = 0; // Not used for parametric? Or maybe needs to be non-zero? 
+	// To be safe for parametric, we might need a non-zero irSize or it might be ignored. 
+	// However, usually irSize is for convolution. Let's assume 0 is fine or set a small default.
+	// Actually, for Hybrid/Parametric, Steam Audio might use internal buffers.
+    // Let's set it to 2 seconds worth just in case it's needed for internal buffers.
+	reflectionSettings.irSize = samplingrate * 2; 
+	reflectionSettings.numChannels = 2; // Stereo reverb
+
+	if (iplReflectionEffectCreate(g_state.context, &g_state.audioSettings, &reflectionSettings, &g_state.reflectionEffect) != IPL_STATUS_SUCCESS) {
+		// If parametric fails, we might try convolution or just fail. 
+		// But let's assume it works as it's standard 4.0+.
+		iplAudioBufferFree(g_state.context, &g_state.outBuffer);
+		iplBinauralEffectRelease(&g_state.effect);
+		iplHRTFRelease(&g_state.hrtf);
+		iplContextRelease(&g_state.context);
+		return false;
 	}
 
+	// Allocate buffers for reverb processing
+	if (iplAudioBufferAllocate(g_state.context, 2, g_state.audioSettings.frameSize, &g_state.reverbInBuffer) != IPL_STATUS_SUCCESS ||
+		iplAudioBufferAllocate(g_state.context, 2, g_state.audioSettings.frameSize, &g_state.reverbOutBuffer) != IPL_STATUS_SUCCESS) {
+		iplReflectionEffectRelease(&g_state.reflectionEffect);
+		iplAudioBufferFree(g_state.context, &g_state.outBuffer);
+		iplBinauralEffectRelease(&g_state.effect);
+		iplHRTFRelease(&g_state.hrtf);
+		iplContextRelease(&g_state.context);
+		return false;
+	}
+
+	g_state.reverbInitialized = true;
 	g_state.outputaudioframe.resize(2 * framesize);
 	g_state.outputInt16.resize(2 * framesize);
+	
+	// Pre-allocate temp buffers for interleaved conversion if needed, 
+	// though iplAudioBufferAllocate gives us deinterleaved buffers.
+	
 	g_state.initialized = true;
 	return true;
 }
@@ -95,6 +134,12 @@ EXPORT void cleanup_steam_audio()
 {
 	if (!g_state.initialized) {
 		return;
+	}
+
+	if (g_state.reverbInitialized) {
+		iplAudioBufferFree(g_state.context, &g_state.reverbOutBuffer);
+		iplAudioBufferFree(g_state.context, &g_state.reverbInBuffer);
+		iplReflectionEffectRelease(&g_state.reflectionEffect);
 	}
 
 	iplAudioBufferFree(g_state.context, &g_state.outBuffer);
@@ -111,13 +156,11 @@ EXPORT bool set_reverb_settings(float room_size, float damping, float wet_level,
 		return false;
 	}
 
-	if (g_state.reverbInitialized) {
-		verblib_set_room_size(&g_state.reverb, room_size);
-		verblib_set_damping(&g_state.reverb, damping);
-		verblib_set_wet(&g_state.reverb, wet_level);
-		verblib_set_dry(&g_state.reverb, dry_level);
-		verblib_set_width(&g_state.reverb, width);
-	}
+	g_state.roomSize = std::max(0.0f, std::min(1.0f, room_size));
+	g_state.damping = std::max(0.0f, std::min(1.0f, damping));
+	g_state.wet = std::max(0.0f, wet_level);
+	g_state.dry = std::max(0.0f, dry_level);
+	g_state.width = std::max(0.0f, width);
 
 	return true;
 }
@@ -227,18 +270,20 @@ EXPORT bool apply_reverb(const int16_t* input_buffer, int input_length, int16_t*
 	}
 
 	// Calculate tail frames for reverb decay
-	unsigned long tail_frames = 0;
-	tail_frames = verblib_get_decay_time_in_frames(&g_state.reverb);
-	// Convert sample frames to processing frames
-	tail_frames = (tail_frames + framesize - 1) / framesize;
+	// Map roomSize (0-1) to decay time (e.g., 0.1s to 5.0s)
+	float decayTime = 0.1f + g_state.roomSize * 4.9f;
+	
+	// Convert decay time to frames
+	unsigned long tail_frames_count = static_cast<unsigned long>((decayTime * g_state.audioSettings.samplingRate));
+	auto tail_blocks = (tail_frames_count + framesize - 1) / framesize;
 
-	auto total_frames = numframes + tail_frames;
+	auto total_frames = numframes + tail_blocks;
 	auto total_output_samples = total_frames * framesize * 2; // 2 channels
 
 	// Allocate output buffer
 	int16_t* output = new int16_t[total_output_samples];
 
-	// Create padded input buffer for processing
+	// Prepare padded input data
 	std::vector<float> paddedInput(total_frames * framesize * 2, 0.0f);
 
 	// Convert input int16 to float and copy to padded buffer
@@ -249,20 +294,72 @@ EXPORT bool apply_reverb(const int16_t* input_buffer, int input_length, int16_t*
 	int16_t* outData = output;
 	const float* inData = paddedInput.data();
 
+	// Calculate reverb parameters once
+	IPLReflectionEffectParams params = {};
+	params.type = IPL_REFLECTIONEFFECTTYPE_PARAMETRIC;
+	params.numChannels = 2;
+	params.irSize = 0; // Not used for apply
+	params.ir = nullptr;
+
+	// Set decay times for 3 bands (Low, Mid, High)
+	// Simple mapping: High freq decay is reduced by damping
+	params.reverbTimes[0] = decayTime;
+	params.reverbTimes[1] = decayTime;
+	params.reverbTimes[2] = decayTime * (1.0f - g_state.damping * 0.8f); // Max 80% reduction
+	
+	// Default EQ
+	params.eq[0] = 1.0f;
+	params.eq[1] = 1.0f;
+	params.eq[2] = 1.0f;
+
+    // Steam Audio buffers are deinterleaved.
+	// We need to deinterleave 'inData' into 'g_state.reverbInBuffer'.
+	// g_state.reverbInBuffer.data[0] is Left, data[1] is Right.
+
 	for (int i = 0; i < total_frames; ++i)
 	{
-		// Copy stereo data to reverb input buffer
-		std::copy(inData, inData + framesize * 2, g_state.reverbInputBuffer.begin());
+		// Deinterleave input
+		for (int j = 0; j < framesize; ++j) {
+			g_state.reverbInBuffer.data[0][j] = inData[j * 2];     // L
+			g_state.reverbInBuffer.data[1][j] = inData[j * 2 + 1]; // R
+		}
 
-		// Process with verblib
-		verblib_process(&g_state.reverb, g_state.reverbInputBuffer.data(), g_state.reverbOutputBuffer.data(), framesize);
+		// Apply reverb
+		iplReflectionEffectApply(g_state.reflectionEffect, &params, &g_state.reverbInBuffer, &g_state.reverbOutBuffer, nullptr);
 
-		// Convert float samples back to 16-bit integers
-		for (int j = 0; j < framesize * 2; ++j) {
-			float sample = g_state.reverbOutputBuffer[j];
-			// Clamp to prevent overflow
-			sample = std::max(-1.0f, std::min(1.0f, sample));
-			outData[j] = static_cast<int16_t>(sample * 32767.0f);
+		// Interleave and mix
+		// Output = Dry * Input + Wet * Reverb
+		// Also apply simple Width (Mid/Side processing) if needed, but for now simple mix.
+		
+		float wet = g_state.wet;
+		float dry = g_state.dry;
+		float width = g_state.width;
+		
+		for (int j = 0; j < framesize; ++j) {
+			float inL = g_state.reverbInBuffer.data[0][j];
+			float inR = g_state.reverbInBuffer.data[1][j];
+			float revL = g_state.reverbOutBuffer.data[0][j];
+			float revR = g_state.reverbOutBuffer.data[1][j];
+			
+			// Mix
+			float outL = (inL * dry) + (revL * wet);
+			float outR = (inR * dry) + (revR * wet);
+			
+			// Apply Width (Simple M/S)
+			if (width != 1.0f) {
+				float mid = (outL + outR) * 0.5f;
+				float side = (outL - outR) * 0.5f;
+				side *= width;
+				outL = mid + side;
+				outR = mid - side;
+			}
+			
+			// Clamp and convert
+			outL = std::max(-1.0f, std::min(1.0f, outL));
+			outR = std::max(-1.0f, std::min(1.0f, outR));
+			
+			outData[j * 2] = static_cast<int16_t>(outL * 32767.0f);
+			outData[j * 2 + 1] = static_cast<int16_t>(outR * 32767.0f);
 		}
 
 		inData += framesize * 2;
