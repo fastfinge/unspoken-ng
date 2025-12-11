@@ -43,6 +43,15 @@ class SettingsPanel(gui.settingsDialogs.SettingsPanel):
 		)
 		self.RoomSizeSlider.Bind(wx.EVT_SLIDER, self.onReverbSettingChanged)
 
+		self.MaterialLabel = settingsSizer.addItem(
+			wx.StaticText(self, label="Room Material")
+		)
+		self.MaterialChoice = settingsSizer.addItem(
+			wx.Choice(self, choices=["Generic", "Brick", "Concrete", "Wood", "Tile", "Carpet"])
+		)
+		self.MaterialChoice.SetSelection(config.conf["unspoken"]["Material"])
+		self.MaterialChoice.Bind(wx.EVT_CHOICE, self.onReverbSettingChanged)
+
 		self.DampingSliderLabel = settingsSizer.addItem(
 			wx.StaticText(self, label="Damping (0-100)")
 		)
@@ -117,6 +126,10 @@ class SettingsPanel(gui.settingsDialogs.SettingsPanel):
 					dry_level=self.DryLevelSlider.GetValue() / 100.0,
 					width=self.WidthSlider.GetValue() / 100.0,
 				)
+				steam_audio_instance.configure_scene(
+					room_size=self.RoomSizeSlider.GetValue(),
+					material_type=self.MaterialChoice.GetSelection()
+				)
 		except ImportError:
 			pass
 
@@ -141,6 +154,7 @@ class SettingsPanel(gui.settingsDialogs.SettingsPanel):
 
 		# Save verblib settings
 		config.conf["unspoken"]["RoomSize"] = self.RoomSizeSlider.GetValue()
+		config.conf["unspoken"]["Material"] = self.MaterialChoice.GetSelection()
 		config.conf["unspoken"]["Damping"] = self.DampingSlider.GetValue()
 		config.conf["unspoken"]["WetLevel"] = self.WetLevelSlider.GetValue()
 		config.conf["unspoken"]["DryLevel"] = self.DryLevelSlider.GetValue()
@@ -161,6 +175,10 @@ class SettingsPanel(gui.settingsDialogs.SettingsPanel):
 					wet_level=config.conf["unspoken"]["WetLevel"] / 100.0,
 					dry_level=config.conf["unspoken"]["DryLevel"] / 100.0,
 					width=config.conf["unspoken"]["Width"] / 100.0,
+				)
+				steam_audio_instance.configure_scene(
+					room_size=config.conf["unspoken"]["RoomSize"],
+					material_type=config.conf["unspoken"]["Material"]
 				)
 		except ImportError:
 			pass

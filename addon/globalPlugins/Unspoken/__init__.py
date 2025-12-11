@@ -106,6 +106,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			"volumeAdjust": "boolean(default=True)",
 			"Reverb": "boolean(default=True)",
 			"RoomSize": "integer(default=10, min=0, max=100)",
+			"Material": "integer(default=0, min=0, max=5)",
 			"Damping": "integer(default=100, min=0, max=100)",
 			"WetLevel": "integer(default=9, min=0, max=100)",
 			"DryLevel": "integer(default=30, min=0, max=100)",
@@ -124,6 +125,10 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			wet_level=config.conf["unspoken"]["WetLevel"] / 100.0,
 			dry_level=config.conf["unspoken"]["DryLevel"] / 100.0,
 			width=config.conf["unspoken"]["Width"] / 100.0,
+		)
+		self.steam_audio.configure_scene(
+			config.conf["unspoken"]["RoomSize"],
+			config.conf["unspoken"]["Material"]
 		)
 
 		self.make_sound_objects()

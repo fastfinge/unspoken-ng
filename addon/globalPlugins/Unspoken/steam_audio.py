@@ -66,6 +66,13 @@ class SteamAudio:
 		]
 		self.dll.set_reverb_settings.restype = c_bool
 
+		# bool configure_scene(float room_size, int material_type)
+		try:
+			self.dll.configure_scene.argtypes = [c_float, c_int]
+			self.dll.configure_scene.restype = c_bool
+		except AttributeError:
+			pass
+
 		# bool process_sound(const float* input_buffer, int input_length, float angle_x, float angle_y, int16_t** output_buffer, int* output_length)
 		self.dll.process_sound.argtypes = [
 			POINTER(c_float),  # input_buffer
@@ -154,6 +161,27 @@ class SteamAudio:
 			else:
 				log.error("Failed to set reverb settings")
 
+		return success
+
+	def configure_scene(self, room_size, material_type):
+		"""Configure simulation scene geometry and material
+		
+		Args:
+			room_size: Room size factor (0.0 to 100.0)
+			material_type: Material preset index (0-5)
+		"""
+		if not self.initialized:
+			return False
+			
+		if not hasattr(self.dll, 'configure_scene'):
+			return False
+
+		with _steam_audio_mutex:
+			success = self.dll.configure_scene(float(room_size), int(material_type))
+			if success:
+				log.debug(f"Scene configured: size={room_size}, material={material_type}")
+			else:
+				log.error("Failed to configure scene")
 		return success
 
 	def process_sound(self, input_buffer, angle_x, angle_y):

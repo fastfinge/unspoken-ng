@@ -54,17 +54,68 @@ struct SteamAudioState {
 
 static SteamAudioState g_state;
 
-bool create_sim_scene(IPLContext context, IPLAudioSettings audioSettings) {
+// Helper to map material type to properties
+IPLMaterial get_material(int type) {
+	IPLMaterial mat = {};
+	// Default: Generic/Concrete-ish
+	float absorption = 0.1f;
+	float scattering = 0.5f;
+	float transmission = 0.1f;
+
+	switch (type) {
+	case 1: // Brick (Rough)
+		absorption = 0.05f; scattering = 0.7f; transmission = 0.05f; break;
+	case 2: // Concrete (Hard)
+		absorption = 0.03f; scattering = 0.2f; transmission = 0.02f; break;
+	case 3: // Wood (Panel)
+		absorption = 0.15f; scattering = 0.3f; transmission = 0.1f; break;
+	case 4: // Tile (Reflective)
+		absorption = 0.02f; scattering = 0.1f; transmission = 0.01f; break;
+	case 5: // Carpet (Absorptive)
+		absorption = 0.60f; scattering = 0.8f; transmission = 0.05f; break;
+	default: // Generic
+		break;
+	}
+	
+	mat.absorption[0] = mat.absorption[1] = mat.absorption[2] = absorption;
+	mat.scattering = scattering;
+	mat.transmission[0] = mat.transmission[1] = mat.transmission[2] = transmission;
+	return mat;
+}
+
+bool recreate_scene(float size, int materialType) {
+    if (!g_state.context) return false;
+
+    // Cleanup existing simulation objects
+    if (g_state.source) {
+        if (g_state.simulator) iplSourceRemove(g_state.source, g_state.simulator);
+        iplSourceRelease(&g_state.source);
+        g_state.source = nullptr;
+    }
+    if (g_state.simulator) {
+        iplSimulatorRelease(&g_state.simulator);
+        g_state.simulator = nullptr;
+    }
+    if (g_state.scene) {
+        iplSceneRelease(&g_state.scene);
+        g_state.scene = nullptr;
+    }
+    if (g_state.staticMesh) {
+        iplStaticMeshRelease(&g_state.staticMesh);
+        g_state.staticMesh = nullptr;
+    }
+    
 	// Create Scene
 	IPLSceneSettings sceneSettings{};
 	sceneSettings.type = IPL_SCENETYPE_DEFAULT;
-	if (iplSceneCreate(context, &sceneSettings, &g_state.scene) != IPL_STATUS_SUCCESS) return false;
+	if (iplSceneCreate(g_state.context, &sceneSettings, &g_state.scene) != IPL_STATUS_SUCCESS) return false;
 
 	// Create Static Mesh (Simple Room)
-	// 10x10x10 room centered at origin
+	// Size is half-extent (radius)
+    float s = size;
 	IPLVector3 vertices[] = {
-		{-5.0f, -5.0f, -5.0f}, {5.0f, -5.0f, -5.0f}, {5.0f, 5.0f, -5.0f}, {-5.0f, 5.0f, -5.0f},
-		{-5.0f, -5.0f, 5.0f}, {5.0f, -5.0f, 5.0f}, {5.0f, 5.0f, 5.0f}, {-5.0f, 5.0f, 5.0f}
+		{-s, -s, -s}, {s, -s, -s}, {s, s, -s}, {-s, s, -s},
+		{-s, -s, s}, {s, -s, s}, {s, s, s}, {-s, s, s}
 	};
 	IPLTriangle triangles[] = {
 		{{0, 1, 2}}, {{0, 2, 3}}, // Front
@@ -75,11 +126,7 @@ bool create_sim_scene(IPLContext context, IPLAudioSettings audioSettings) {
 		{{1, 2, 6}}, {{1, 6, 5}}  // Right
 	};
 	IPLint32 materialIndices[] = { 0,0,0,0,0,0,0,0,0,0,0,0 };
-	IPLMaterial material;
-	material.absorption[0] = 0.1f; material.absorption[1] = 0.1f; material.absorption[2] = 0.1f;
-	material.scattering = 0.5f;
-	material.transmission[0] = 0.1f; material.transmission[1] = 0.1f; material.transmission[2] = 0.1f;
-	IPLMaterial materials[] = { material };
+	IPLMaterial materials[] = { get_material(materialType) };
 
 	IPLStaticMeshSettings meshSettings{};
 	meshSettings.numVertices = 8;
@@ -106,10 +153,10 @@ bool create_sim_scene(IPLContext context, IPLAudioSettings audioSettings) {
     simSettings.numThreads = 1;
     simSettings.rayBatchSize = 1024;
     simSettings.numVisSamples = 1024;
-    simSettings.samplingRate = audioSettings.samplingRate;
-    simSettings.frameSize = audioSettings.frameSize;
+    simSettings.samplingRate = g_state.audioSettings.samplingRate;
+    simSettings.frameSize = g_state.audioSettings.frameSize;
 
-	if (iplSimulatorCreate(context, &simSettings, &g_state.simulator) != IPL_STATUS_SUCCESS) return false;
+	if (iplSimulatorCreate(g_state.context, &simSettings, &g_state.simulator) != IPL_STATUS_SUCCESS) return false;
 
 	iplSimulatorSetScene(g_state.simulator, g_state.scene);
 	iplSimulatorCommit(g_state.simulator);
@@ -122,12 +169,16 @@ bool create_sim_scene(IPLContext context, IPLAudioSettings audioSettings) {
 	iplSourceAdd(g_state.source, g_state.simulator);
 	iplSimulatorCommit(g_state.simulator);
 
-	// Create Direct Effect
-	IPLDirectEffectSettings directSettings{};
-	directSettings.numChannels = 1; 
-	if (iplDirectEffectCreate(context, &audioSettings, &directSettings, &g_state.directEffect) != IPL_STATUS_SUCCESS) return false;
+    return true;
+}
 
-	return true;
+EXPORT bool configure_scene(float room_size, int material_type) {
+    if (!g_state.initialized) return false;
+    // Map room_size (0-100) to dimension (e.g. 2m to 50m)
+    // 0 -> 2m (size=1.0)
+    // 100 -> 52m (size=26.0)
+    float size = 1.0f + (room_size * 0.25f); 
+    return recreate_scene(size, material_type);
 }
 
 EXPORT bool initialize_steam_audio(int samplingrate, int framesize)
@@ -202,10 +253,25 @@ EXPORT bool initialize_steam_audio(int samplingrate, int framesize)
 		return false;
 	}
 
-    // Initialize Simulation
-    if (!create_sim_scene(g_state.context, g_state.audioSettings)) {
-        // Log warning or fail? Let's fail for now to ensure we know it works.
-        // Clean up previous
+    // Create Direct Effect (Once)
+	IPLDirectEffectSettings directSettings{};
+	directSettings.numChannels = 1; 
+	if (iplDirectEffectCreate(g_state.context, &g_state.audioSettings, &directSettings, &g_state.directEffect) != IPL_STATUS_SUCCESS) {
+        // Cleanup...
+		iplAudioBufferFree(g_state.context, &g_state.reverbOutBuffer);
+		iplAudioBufferFree(g_state.context, &g_state.reverbInBuffer);
+        iplReflectionEffectRelease(&g_state.reflectionEffect);
+		iplAudioBufferFree(g_state.context, &g_state.outBuffer);
+		iplBinauralEffectRelease(&g_state.effect);
+		iplHRTFRelease(&g_state.hrtf);
+		iplContextRelease(&g_state.context);
+        return false;
+    }
+
+    // Initialize Simulation Scene (Default size 5m, Generic material)
+    if (!recreate_scene(5.0f, 0)) {
+        // Cleanup...
+        iplDirectEffectRelease(&g_state.directEffect);
 		iplAudioBufferFree(g_state.context, &g_state.reverbOutBuffer);
 		iplAudioBufferFree(g_state.context, &g_state.reverbInBuffer);
         iplReflectionEffectRelease(&g_state.reflectionEffect);
