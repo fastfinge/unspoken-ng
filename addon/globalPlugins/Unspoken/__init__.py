@@ -139,6 +139,16 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         self._last_played_time = 0
         self._last_navigator_object = None
         self._wave_player_lock = threading.Lock()
+        self._sound_generation = 0
+
+        # Cached values to reduce main-thread blocking during sound playback.
+        # Desktop dimensions change rarely (monitor changes); refresh every 5 seconds.
+        # Volume changes only when synth changes; refresh in on_synthChanged.
+        self._cached_desktop_size = None  # (max_x, max_y)
+        self._desktop_cache_time = 0
+        self._cached_volume = 1.0
+        self._update_desktop_cache()
+        self._update_volume_cache()
 
         # Lightweight timer to check arrow key navigation
         self._navigation_timer = wx.Timer()
@@ -231,6 +241,22 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         volume = clamp(volume, 0.0, 1.0)
         return volume if not config.conf["unspoken"]["HRTF"] else volume + 0.25
 
+    def _update_volume_cache(self):
+        """Update cached volume value. Called at init and when synth changes."""
+        self._cached_volume = self._compute_volume()
+
+    def _update_desktop_cache(self):
+        """Update cached desktop dimensions. Called at init and lazily refreshed."""
+        desktop = NVDAObjects.api.getDesktopObject()
+        self._cached_desktop_size = (desktop.location[2], desktop.location[3])
+        self._desktop_cache_time = time.time()
+
+    def _get_desktop_size(self):
+        """Get desktop dimensions, refreshing cache if stale (>5 seconds)."""
+        if time.time() - self._desktop_cache_time > 5.0:
+            self._update_desktop_cache()
+        return self._cached_desktop_size
+
     # CRITICAL: NVDA objects use COM single-threaded apartment model. All property
     # access (role, location, treeInterceptor.currentNVDAObject) MUST occur on the
     # main thread before spawning background threads. Moving these accesses to
@@ -240,7 +266,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
     def _extract_sound_params(self, obj):
         """Extract NVDA object properties on main thread for sound playback.
 
-        Returns tuple (role, angle_x, angle_y) or None if sound should not play.
+        Returns tuple (role, angle_x, angle_y, volume) or None if sound should not play.
         Must be called from main thread before spawning background threads.
         """
         if config.conf["unspoken"]["noSounds"]:
@@ -249,7 +275,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
             return None
 
         curtime = time.time()
-        if curtime - self._last_played_time < 0.1 and obj is self._last_played_object:
+        if curtime - self._last_played_time < 0.1 and obj == self._last_played_object:
             return None
 
         self._last_played_object = obj
@@ -259,10 +285,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         if role not in sounds:
             return None
 
-        # Get coordinate bounds of desktop.
-        desktop = NVDAObjects.api.getDesktopObject()
-        desktop_max_x = desktop.location[2]
-        desktop_max_y = desktop.location[3]
+        # Get coordinate bounds of desktop (cached, refreshed every 5 seconds).
+        desktop_max_x, desktop_max_y = self._get_desktop_size()
 
         # Get location of the object.
         if obj.location != None and obj.treeInterceptor == None:
@@ -293,29 +317,34 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         angle_x = clamp(angle_x, -90.0, 90.0)
         angle_y = clamp(angle_y, -90.0, 90.0)
 
-        return (role, angle_x, angle_y)
+        # Use cached volume (updated at init and when synth changes)
+        return (role, angle_x, angle_y, self._cached_volume)
 
     def _play_object_async(self, obj):
         """Extract params and play sound in background thread."""
         params = self._extract_sound_params(obj)
         if params is not None:
-            role, angle_x, angle_y = params
+            role, angle_x, angle_y, volume = params
+            self._sound_generation += 1
+            my_generation = self._sound_generation
 
             def play_async():
                 try:
-                    self._play_sound_async(role, angle_x, angle_y)
+                    self._play_sound_async(role, angle_x, angle_y, volume, my_generation)
                 except Exception:
                     pass
 
             threading.Thread(target=play_async, daemon=True).start()
 
-    def _play_sound_async(self, role, angle_x, angle_y):
+    def _play_sound_async(self, role, angle_x, angle_y, volume, generation):
         """Process and play sound on background thread using pre-extracted parameters.
 
         Args:
                 role: Control type role constant
                 angle_x: Horizontal angle in degrees (-90 to 90)
                 angle_y: Vertical angle in degrees (-90 to 90)
+                volume: Pre-computed volume multiplier
+                generation: Sound generation number for interrupt detection
         """
         if role not in sounds:
             return
@@ -323,8 +352,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         sound_data = sounds[role]
         audio_data = sound_data["data"]
 
-        # Adjust volume
-        volume = self._compute_volume()
+        # Adjust volume (pre-computed on main thread)
         adjusted_audio = [sample * volume for sample in audio_data]
 
         # Process with Steam Audio for 3D positioning
@@ -344,14 +372,22 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
             else:
                 log.warn("Failed applying reverb to %r", role)
 
-        # Play the final audio. Lock protects the WavePlayer API sequence
-        # (stop -> feed -> sync -> idle) from concurrent calls when multiple
-        # background threads trigger sounds simultaneously.
+        # Exit early if this sound has been superseded by a newer request
+        if generation != self._sound_generation:
+            return
+
+        # Immediate interrupt - stop() is called WITHOUT lock to enable instant
+        # interruption per NVDA WavePlayer design. Any thread can interrupt at
+        # any time; the generation check above ensures only current sound stops.
+        self.wave_player.stop()
+
+        # Lock protects feed() from concurrent calls (WavePlayer requirement).
+        # Second generation check catches threads that passed the pre-stop check
+        # but queued at the lock while a newer sound was requested.
         with self._wave_player_lock:
-            self.wave_player.stop()
+            if generation != self._sound_generation:
+                return
             self.wave_player.feed(final_audio)
-            self.wave_player.sync()
-            self.wave_player.idle()
 
     def event_gainFocus(self, obj, nextHandler):
         # Always call nextHandler first to avoid blocking navigation
@@ -388,6 +424,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         synthChanged.unregister(self.on_synthChanged)
 
     def on_synthChanged(self):
+        self._update_volume_cache()
         with self._wave_player_lock:
             self.wave_player.close()
             self.create_wave_player()
