@@ -24,11 +24,12 @@ import wx
 import nvwave
 from synthDriverHandler import synthChanged
 
-# Import Steam Audio
+# openal_audio wraps soft_oal.dll via ctypes; import failure means DLL is missing.
+# The HRTF config checkbox adjusts source gain by +0.25; it does not disable HRTF rendering.
 try:
-    from . import steam_audio
+    from . import openal_audio
 except ImportError as e:
-    log.error(f"Failed to load Steam Audio: {e}")
+    log.error(f"Failed to load OpenAL audio engine: {e}")
     raise
 
 UNSPOKEN_ROOT_PATH = os.path.abspath(os.path.dirname(__file__))
@@ -111,20 +112,21 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
             "DryLevel": "integer(default=30, min=0, max=100)",
             "Width": "integer(default=100, min=0, max=100)",
         }
-        log.debug("Initializing Steam Audio", exc_info=True)
-        self.steam_audio = steam_audio.get_steam_audio()
-        if not self.steam_audio.initialize():
-            log.error("Failed to initialize Steam Audio")
-            raise RuntimeError("Steam Audio initialization failed")
+        log.debug("Initializing OpenAL audio engine", exc_info=True)
+        self.audio_engine = openal_audio.get_openal_audio()
+        if not self.audio_engine.initialize():
+            log.error("Failed to initialize OpenAL audio engine")
+            raise RuntimeError("OpenAL audio engine initialization failed")
 
         # Configure reverb settings
-        self.steam_audio.set_reverb_settings(
+        self.audio_engine.set_reverb_settings(
             room_size=config.conf["unspoken"]["RoomSize"] / 100.0,
             damping=config.conf["unspoken"]["Damping"] / 100.0,
             wet_level=config.conf["unspoken"]["WetLevel"] / 100.0,
             dry_level=config.conf["unspoken"]["DryLevel"] / 100.0,
             width=config.conf["unspoken"]["Width"] / 100.0,
         )
+        self.audio_engine.enable_reverb(config.conf["unspoken"]["Reverb"])
 
         self.make_sound_objects()
 
@@ -170,8 +172,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         )
 
     def make_sound_objects(self):
-        """Load sound files for Steam Audio processing."""
-        log.debug("Loading sound files for Steam Audio", exc_info=True)
+        """Load sound files for OpenAL audio processing."""
+        log.debug("Loading sound files for OpenAL audio engine", exc_info=True)
         for key, value in sound_files.items():
             path = os.path.join(UNSPOKEN_SOUNDS_PATH, value)
             log.debug("Loading " + path, exc_info=True)
@@ -355,22 +357,13 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         # Adjust volume (pre-computed on main thread)
         adjusted_audio = [sample * volume for sample in audio_data]
 
-        # Process with Steam Audio for 3D positioning
-        processed_audio = self.steam_audio.process_sound(
+        # Process with OpenAL for HRTF spatialization and reverb
+        final_audio = self.audio_engine.process_sound(
             adjusted_audio, angle_x, angle_y
         )
-        if not processed_audio:
+        if not final_audio:
             log.warn("Failed processing %r", role)
             return
-
-        # Apply reverb if enabled
-        final_audio = processed_audio
-        if config.conf["unspoken"]["Reverb"]:
-            reverb_audio = self.steam_audio.apply_reverb(processed_audio)
-            if reverb_audio:
-                final_audio = reverb_audio
-            else:
-                log.warn("Failed applying reverb to %r", role)
 
         # Exit early if this sound has been superseded by a newer request
         if generation != self._sound_generation:
@@ -418,9 +411,9 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
             except Exception:
                 pass
 
-        # Cleanup Steam Audio
-        if hasattr(self, "steam_audio"):
-            self.steam_audio.cleanup()
+        # Cleanup OpenAL audio engine
+        if hasattr(self, "audio_engine"):
+            self.audio_engine.cleanup()
         synthChanged.unregister(self.on_synthChanged)
 
     def on_synthChanged(self):
