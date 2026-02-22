@@ -13,6 +13,7 @@ directory. DLL load failure raises OSError at import time.
 """
 
 import ctypes
+import math
 import os
 import threading
 
@@ -33,6 +34,7 @@ AL_FORMAT_MONO16 = 0x1101
 AL_BUFFER = 0x1009
 AL_POSITION = 0x1004
 AL_GAIN = 0x100A
+AL_NONE = 0
 
 # EFX effect type constants
 AL_EFFECT_TYPE = 0x8001
@@ -387,6 +389,10 @@ class OpenALLoopback:
             return None
 
         with self._mutex:
+            # Detach buffer from source before re-uploading data.
+            # alBufferData fails on a buffer still attached to a source (even stopped).
+            self.dll.alSourcei(self._source.value, AL_BUFFER, AL_NONE)
+
             # Convert float32 mono samples to int16 PCM for OpenAL buffer upload
             pcm_data = self._float_to_int16(input_samples)
             num_input_frames = len(input_samples)
@@ -401,11 +407,18 @@ class OpenALLoopback:
             )
             self._check_al_error("alBufferData")
 
-            # Attach buffer and position source in 3D space for HRTF
+            # Attach buffer and position source as unit direction vector for HRTF.
+            # Raw degree values would place the source far from the listener,
+            # causing near-silence from OpenAL's distance attenuation model.
             self.dll.alSourcei(self._source.value, AL_BUFFER, self._buffer.value)
+            rad_x = math.radians(angle_x)
+            rad_y = math.radians(angle_y)
+            pos_x = math.sin(rad_x) * math.cos(rad_y)
+            pos_y = math.sin(rad_y)
+            pos_z = -math.cos(rad_x) * math.cos(rad_y)
             self.dll.alSource3f(
                 self._source.value, AL_POSITION,
-                ctypes.c_float(angle_x), ctypes.c_float(angle_y), ctypes.c_float(1.0)
+                ctypes.c_float(pos_x), ctypes.c_float(pos_y), ctypes.c_float(pos_z)
             )
             # Dry level is the source gain; EFX separates dry/wet at source level
             self.dll.alSourcef(self._source.value, AL_GAIN, ctypes.c_float(self._dry_level))
