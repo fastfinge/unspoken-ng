@@ -388,6 +388,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
             if generation != self._sound_generation:
                 return
             self.wave_player.feed(final_audio)
+            self.wave_player.idle()
 
     def event_gainFocus(self, obj, nextHandler):
         # Always call nextHandler first to avoid blocking navigation
