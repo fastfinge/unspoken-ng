@@ -19,9 +19,9 @@ addon_info = {
 	# Translators: Long description to be shown for this add-on on add-on information from add-ons manager
 	"addon_description" : _("""Adds 3D audio for controls and replaces control messages. This updated version uses steamaudio and is only compatible with NVDA 2026.1 and later."""),
 	# version
-	"addon_version" : "1.0.3",
+	"addon_version" : "2.0",
 	# Author(s)
-	"addon_author" : "Camlorn <camlorn38@gmail.com>, Bryan Smart< Bryansmart@bryansmart.com>, Masonasons <mason@masonasons.me>, Tyler Spivey, Samuel Proulx, Ambro86",
+	"addon_author" : "Camlorn <camlorn38@gmail.com>, Bryan Smart< Bryansmart@bryansmart.com>, Masonasons <mason@masonasons.me>, Tyler Spivey, Samuel Proulx, Ambro86, akj",
 	# URL for the add-on documentation support
 	"addon_url" : "https://github.com/fastfinge/unspoken-ng",
 	# Documentation file name
