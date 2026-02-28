@@ -29,7 +29,7 @@ class SettingsPanel(gui.settingsDialogs.SettingsPanel):
 		self.ReverbCheckBox.SetValue(config.conf["unspoken"]["Reverb"])
 		self.ReverbCheckBox.Bind(wx.EVT_CHECKBOX, self.onReverbSettingChanged)
 
-		# Verblib reverb settings
+		# EFX reverb settings
 		self.RoomSizeSliderLabel = settingsSizer.addItem(
 			wx.StaticText(self, label="Room Size (0-100)")
 		)
@@ -102,15 +102,18 @@ class SettingsPanel(gui.settingsDialogs.SettingsPanel):
 		self.unspoken_copy = config.conf["unspoken"].copy()
 
 	def onReverbSettingChanged(self, event):
-		"""Called when any reverb slider changes - update settings immediately"""
+		"""Push slider values to the live OpenALLoopback instance.
+		enable_reverb() is called before set_reverb_settings() so the EFX tail
+		frame count is only computed when reverb is active."""
 		try:
 			# Import here to avoid circular imports
-			from . import steam_audio
+			from . import openal_audio
 
-			steam_audio_instance = steam_audio.get_steam_audio()
-			if steam_audio_instance and steam_audio_instance.initialized:
+			openal_audio_instance = openal_audio.get_openal_audio()
+			if openal_audio_instance and openal_audio_instance.initialized:
 				config.conf["unspoken"]["Reverb"] = self.ReverbCheckBox.IsChecked()
-				steam_audio_instance.set_reverb_settings(
+				openal_audio_instance.enable_reverb(self.ReverbCheckBox.IsChecked())
+				openal_audio_instance.set_reverb_settings(
 					room_size=self.RoomSizeSlider.GetValue() / 100.0,
 					damping=self.DampingSlider.GetValue() / 100.0,
 					wet_level=self.WetLevelSlider.GetValue() / 100.0,
@@ -139,7 +142,7 @@ class SettingsPanel(gui.settingsDialogs.SettingsPanel):
 		config.conf["unspoken"]["HRTF"] = self.HRTFCheckBox.IsChecked()
 		config.conf["unspoken"]["Reverb"] = self.ReverbCheckBox.IsChecked()
 
-		# Save verblib settings
+		# Save EFX reverb settings
 		config.conf["unspoken"]["RoomSize"] = self.RoomSizeSlider.GetValue()
 		config.conf["unspoken"]["Damping"] = self.DampingSlider.GetValue()
 		config.conf["unspoken"]["WetLevel"] = self.WetLevelSlider.GetValue()
@@ -149,13 +152,14 @@ class SettingsPanel(gui.settingsDialogs.SettingsPanel):
 		config.conf["unspoken"]["volumeAdjust"] = self.volumeCheckBox.IsChecked()
 
 	def update_reverb_from_config(self):
-		# Update Steam Audio reverb settings
+		# Update OpenAL EFX reverb settings
 		try:
-			from . import steam_audio
+			from . import openal_audio
 
-			steam_audio_instance = steam_audio.get_steam_audio()
-			if steam_audio_instance and steam_audio_instance.initialized:
-				steam_audio_instance.set_reverb_settings(
+			openal_audio_instance = openal_audio.get_openal_audio()
+			if openal_audio_instance and openal_audio_instance.initialized:
+				openal_audio_instance.enable_reverb(config.conf["unspoken"]["Reverb"])
+				openal_audio_instance.set_reverb_settings(
 					room_size=config.conf["unspoken"]["RoomSize"] / 100.0,
 					damping=config.conf["unspoken"]["Damping"] / 100.0,
 					wet_level=config.conf["unspoken"]["WetLevel"] / 100.0,
