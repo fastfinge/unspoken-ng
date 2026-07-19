@@ -17,7 +17,7 @@ addon_info = {
 	"addon_summary" : _("Unspoken-ng 3D Audio"),
 	# Add-on description
 	# Translators: Long description to be shown for this add-on on add-on information from add-ons manager
-	"addon_description" : _("""Adds 3D audio for controls and replaces control messages. This updated version uses steamaudio and is only compatible with NVDA 2026.1 and later."""),
+	"addon_description" : _("""Adds 3D audio for controls and replaces control messages. This updated version uses OpenAL Soft and is only compatible with NVDA 2026.1 and later."""),
 	# version
 	"addon_version" : "2.0",
 	# Author(s)

@@ -447,12 +447,6 @@ class OpenALLoopback:
             self.dll.alSourceStop(self._source.value)
             return bytes(out_buf)
 
-    def apply_reverb(self, input_buffer):
-        """Return input_buffer unchanged.
-        Reverb is applied inside process_sound via EFX effect slot.
-        Callers that invoke apply_reverb separately receive unmodified audio."""
-        return input_buffer
-
 
 # Module-level singleton -- one OpenALLoopback instance shared across all threads
 _openal_audio_instance = None
@@ -464,16 +458,3 @@ def get_openal_audio():
     if _openal_audio_instance is None:
         _openal_audio_instance = OpenALLoopback()
     return _openal_audio_instance
-
-
-def initialize_openal_audio(sample_rate=44100, frame_size=1024):
-    """Initialize the global OpenALLoopback instance."""
-    return get_openal_audio().initialize(sample_rate, frame_size)
-
-
-def cleanup_openal_audio():
-    """Cleanup and release the global OpenALLoopback instance."""
-    global _openal_audio_instance
-    if _openal_audio_instance is not None:
-        _openal_audio_instance.cleanup()
-        _openal_audio_instance = None

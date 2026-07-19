@@ -1,8 +1,8 @@
 # unspoken-ng
 
-Unspoken for modern NVDA, using pyopenal
+Unspoken for modern NVDA, using OpenAL Soft
 
-The v1 series of unspoken-ng used steam audio. However, this required compiling C++ sourcecode to build the addon, and made the addon quite large. The v2 series now uses PyOpenAl instead, shrinking the size of the addon, and removing the need for libverb.
+The v1 series of unspoken-ng used steam audio. However, this required compiling C++ sourcecode to build the addon, and made the addon quite large. The v2 series now uses OpenAL Soft instead, shrinking the size of the addon, and removing the need for libverb.
 
 ## Why?
 
@@ -13,7 +13,7 @@ Unfortunately, previous versions of Unspoken had many serious problems due to th
 
 ## The Solution
 
-This version of Unspoken now uses a 3d audio library called pyopenal.  Pyopenal is a well documented library, used in many applications. That means the library is battle tested, debugged, and maintained.  
+This version of Unspoken now uses OpenAL Soft, loaded directly via ctypes (the bundled soft_oal.dll). OpenAL Soft is a well documented library, used in many applications. That means the library is battle tested, debugged, and maintained.  
 
 ## Credits
 
@@ -22,7 +22,7 @@ In the case of this project, I'm really just the releaser, documenter, and conta
 * Masonasons: updating the Unspoken addon with the API changes in 2023 and 2024
 * Ambro86: maintaining modern Python bindings for synthizer, as well as contributing some code to unspoken
 * Tyler Spivey: for sitting down, figuring out steam audio, and creating Python bindings that do what we need
-* AKJ, for converting everything to pyopenal
+* AKJ, for converting everything to OpenAL Soft
 * Me: for really needing this functionality, doing what I could to keep it going, and bothering other people to help with all the hard bits
 
 ## Using the addon
@@ -31,14 +31,13 @@ The addon, once installed, will create a new category under settings called "uns
 
 ## Building
 
-If all you want to build is the NVDA addon, you can do so using scons.  If, however, you would like to make changes to the SteamAudio bindings, you will need the steam audio sdk, and the Microsoft Visual C++ compiler. Once you have these things, you can build the bindings and the addon by running build.bat.
+Build the NVDA addon using scons.  The addon bundles the official OpenAL Soft Windows x64 build (soft_oal.dll); no native code needs to be compiled.
 
 ## Known Issues
 
 If you would like to fix any of these issues, pull requests will be happily and gratefully accepted:
-1. Currently, unspoken-ng uses libverb for reverb, instead of SteamAudio. While SteamAudio supports reverb directly, it's poorly documented, and we couldn't get it to work.  
-2. No translation support: it's unclear to me what needs to happen here. I need to make some kind of cloud account for some sort of crowd service or something?
-3. Unspoken-ng does not play sounds while arrowing through some controls on the web.  This is because we can't get the position of a control until the focus moves to it, and NVDA no longer moves system focus with the browse cursor.  We should be able to fix this by copying parts of the way earcons does things. I just haven't gotten there yet.
+1. No translation support: it's unclear to me what needs to happen here. I need to make some kind of cloud account for some sort of crowd service or something?
+2. Unspoken-ng does not play sounds while arrowing through some controls on the web.  This is because we can't get the position of a control until the focus moves to it, and NVDA no longer moves system focus with the browse cursor.  We should be able to fix this by copying parts of the way earcons does things. I just haven't gotten there yet.
 
 ## Maintenance commitment
 
