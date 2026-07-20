@@ -230,6 +230,12 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
             current_nav = api.getNavigatorObject()
             if current_nav and current_nav != self._last_navigator_object:
                 self._last_navigator_object = current_nav
+                # Focus changes move the navigator too, and event_gainFocus has
+                # already played this object; the dedup in _extract_sound_params
+                # cannot catch the echo because the timer fires later than its
+                # 100 ms window. Only review/object navigation plays from here.
+                if current_nav == api.getFocusObject():
+                    return
                 self._play_object_async(current_nav)
         except Exception:
             # Ignore any errors to avoid interrupting the timer
