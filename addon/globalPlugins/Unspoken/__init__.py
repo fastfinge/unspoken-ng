@@ -1,6 +1,6 @@
 # Unspoken user interface feedback for NVDA
 # By Bryan Smart (bryansmart@bryansmart.com) and Austin Hicks (camlorn38@gmail.com)
-# Updated to use Synthizer by Mason Armstrong (mason@masonasons.me)
+# Audio engine: OpenAL Soft via ctypes (see openal_audio.py)
 
 import atexit
 import os

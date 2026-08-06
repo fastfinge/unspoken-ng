@@ -10,3 +10,4 @@ addon/doc/en/
 .*.zip
 *.zip
 .sconsign.dblite
+.vscode/
