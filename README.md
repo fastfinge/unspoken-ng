@@ -90,6 +90,12 @@ python -m pip install pytest
 python -m pytest tests/
 ```
 
+`pyproject.toml` groups the tooling so [uv](https://docs.astral.sh/uv/) can fetch it on demand: `uv run --group test pytest tests/`, `uv run --group build scons`.
+
+## Releasing
+
+Publish a GitHub release whose tag is the bare version, no `v` prefix (e.g. `2.1`, matching the NVDA add-on store's `X.Y` convention) — that's the whole process. The addon version is stamped from `git describe --tags` at build time, so the tag *is* the version: CI rebuilds the addon from the tag — running the test suite and artifact verification first — and attaches the `.nvda-addon` to the release. Nothing is bumped, built, or uploaded by hand; local builds between tags get a version like `2.0-51-g3b71875`.
+
 ## Known Issues
 
 If you would like to fix any of these issues, pull requests will be happily and gratefully accepted:
