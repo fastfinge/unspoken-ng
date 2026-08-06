@@ -1,0 +1,638 @@
+[
+ {
+  "reason": "CARET",
+  "fieldType": "end_inControlFieldStack",
+  "role": "BUTTON",
+  "calls": 7
+ },
+ {
+  "reason": "CARET",
+  "fieldType": "end_inControlFieldStack",
+  "role": "CHECKBOX",
+  "calls": 3
+ },
+ {
+  "reason": "CARET",
+  "fieldType": "end_inControlFieldStack",
+  "role": "DOCUMENT",
+  "calls": 116
+ },
+ {
+  "reason": "CARET",
+  "fieldType": "end_inControlFieldStack",
+  "role": "EDITABLETEXT",
+  "calls": 82
+ },
+ {
+  "reason": "CARET",
+  "fieldType": "end_inControlFieldStack",
+  "role": "GROUPING",
+  "calls": 144
+ },
+ {
+  "reason": "CARET",
+  "fieldType": "end_inControlFieldStack",
+  "role": "HEADING",
+  "calls": 25
+ },
+ {
+  "reason": "CARET",
+  "fieldType": "end_inControlFieldStack",
+  "role": "LANDMARK",
+  "calls": 14
+ },
+ {
+  "reason": "CARET",
+  "fieldType": "end_inControlFieldStack",
+  "role": "LIST",
+  "calls": 11
+ },
+ {
+  "reason": "CARET",
+  "fieldType": "end_inControlFieldStack",
+  "role": "LISTITEM",
+  "calls": 11
+ },
+ {
+  "reason": "CARET",
+  "fieldType": "end_inControlFieldStack",
+  "role": "PARAGRAPH",
+  "calls": 92
+ },
+ {
+  "reason": "CARET",
+  "fieldType": "end_inControlFieldStack",
+  "role": "STATICTEXT",
+  "calls": 12
+ },
+ {
+  "reason": "CARET",
+  "fieldType": "end_relative",
+  "role": "CHECKBOX",
+  "calls": 3
+ },
+ {
+  "reason": "CARET",
+  "fieldType": "end_relative",
+  "role": "LABEL",
+  "calls": 3
+ },
+ {
+  "reason": "CARET",
+  "fieldType": "end_relative",
+  "role": "LINK",
+  "calls": 31
+ },
+ {
+  "reason": "CARET",
+  "fieldType": "end_removedFromControlFieldStack",
+  "role": "BUTTON",
+  "calls": 7
+ },
+ {
+  "reason": "CARET",
+  "fieldType": "end_removedFromControlFieldStack",
+  "role": "CHECKBOX",
+  "calls": 3
+ },
+ {
+  "reason": "CARET",
+  "fieldType": "end_removedFromControlFieldStack",
+  "role": "EDITABLETEXT",
+  "calls": 5
+ },
+ {
+  "reason": "CARET",
+  "fieldType": "end_removedFromControlFieldStack",
+  "role": "GROUPING",
+  "calls": 12
+ },
+ {
+  "reason": "CARET",
+  "fieldType": "end_removedFromControlFieldStack",
+  "role": "HEADING",
+  "calls": 11
+ },
+ {
+  "reason": "CARET",
+  "fieldType": "end_removedFromControlFieldStack",
+  "role": "LIST",
+  "calls": 1
+ },
+ {
+  "reason": "CARET",
+  "fieldType": "end_removedFromControlFieldStack",
+  "role": "LISTITEM",
+  "calls": 2
+ },
+ {
+  "reason": "CARET",
+  "fieldType": "end_removedFromControlFieldStack",
+  "role": "PARAGRAPH",
+  "calls": 36
+ },
+ {
+  "reason": "CARET",
+  "fieldType": "end_removedFromControlFieldStack",
+  "role": "STATICTEXT",
+  "calls": 5
+ },
+ {
+  "reason": "CARET",
+  "fieldType": "start_addedToControlFieldStack",
+  "role": "BUTTON",
+  "calls": 7
+ },
+ {
+  "reason": "CARET",
+  "fieldType": "start_addedToControlFieldStack",
+  "role": "CHECKBOX",
+  "calls": 6
+ },
+ {
+  "reason": "CARET",
+  "fieldType": "start_addedToControlFieldStack",
+  "role": "DOCUMENT",
+  "calls": 8
+ },
+ {
+  "reason": "CARET",
+  "fieldType": "start_addedToControlFieldStack",
+  "role": "EDITABLETEXT",
+  "calls": 6
+ },
+ {
+  "reason": "CARET",
+  "fieldType": "start_addedToControlFieldStack",
+  "role": "GROUPING",
+  "calls": 8
+ },
+ {
+  "reason": "CARET",
+  "fieldType": "start_addedToControlFieldStack",
+  "role": "HEADING",
+  "calls": 17
+ },
+ {
+  "reason": "CARET",
+  "fieldType": "start_addedToControlFieldStack",
+  "role": "LABEL",
+  "calls": 3
+ },
+ {
+  "reason": "CARET",
+  "fieldType": "start_addedToControlFieldStack",
+  "role": "LINK",
+  "calls": 16
+ },
+ {
+  "reason": "CARET",
+  "fieldType": "start_addedToControlFieldStack",
+  "role": "LIST",
+  "calls": 2
+ },
+ {
+  "reason": "CARET",
+  "fieldType": "start_addedToControlFieldStack",
+  "role": "LISTITEM",
+  "calls": 3
+ },
+ {
+  "reason": "CARET",
+  "fieldType": "start_addedToControlFieldStack",
+  "role": "PARAGRAPH",
+  "calls": 38
+ },
+ {
+  "reason": "CARET",
+  "fieldType": "start_addedToControlFieldStack",
+  "role": "STATICTEXT",
+  "calls": 6
+ },
+ {
+  "reason": "CARET",
+  "fieldType": "start_inControlFieldStack",
+  "role": "DOCUMENT",
+  "calls": 108
+ },
+ {
+  "reason": "CARET",
+  "fieldType": "start_inControlFieldStack",
+  "role": "EDITABLETEXT",
+  "calls": 76
+ },
+ {
+  "reason": "CARET",
+  "fieldType": "start_inControlFieldStack",
+  "role": "GROUPING",
+  "calls": 136
+ },
+ {
+  "reason": "CARET",
+  "fieldType": "start_inControlFieldStack",
+  "role": "HEADING",
+  "calls": 8
+ },
+ {
+  "reason": "CARET",
+  "fieldType": "start_inControlFieldStack",
+  "role": "LANDMARK",
+  "calls": 14
+ },
+ {
+  "reason": "CARET",
+  "fieldType": "start_inControlFieldStack",
+  "role": "LIST",
+  "calls": 9
+ },
+ {
+  "reason": "CARET",
+  "fieldType": "start_inControlFieldStack",
+  "role": "LISTITEM",
+  "calls": 8
+ },
+ {
+  "reason": "CARET",
+  "fieldType": "start_inControlFieldStack",
+  "role": "PARAGRAPH",
+  "calls": 54
+ },
+ {
+  "reason": "CARET",
+  "fieldType": "start_inControlFieldStack",
+  "role": "STATICTEXT",
+  "calls": 6
+ },
+ {
+  "reason": "CARET",
+  "fieldType": "start_relative",
+  "role": "LINK",
+  "calls": 15
+ },
+ {
+  "reason": "FOCUS",
+  "fieldType": "end_inControlFieldStack",
+  "role": "BUTTON",
+  "calls": 12
+ },
+ {
+  "reason": "FOCUS",
+  "fieldType": "end_inControlFieldStack",
+  "role": "CHECKBOX",
+  "calls": 14
+ },
+ {
+  "reason": "FOCUS",
+  "fieldType": "end_inControlFieldStack",
+  "role": "DOCUMENT",
+  "calls": 60
+ },
+ {
+  "reason": "FOCUS",
+  "fieldType": "end_inControlFieldStack",
+  "role": "LABEL",
+  "calls": 7
+ },
+ {
+  "reason": "FOCUS",
+  "fieldType": "end_inControlFieldStack",
+  "role": "LINK",
+  "calls": 34
+ },
+ {
+  "reason": "FOCUS",
+  "fieldType": "end_inControlFieldStack",
+  "role": "PARAGRAPH",
+  "calls": 60
+ },
+ {
+  "reason": "FOCUS",
+  "fieldType": "start_addedToControlFieldStack",
+  "role": "BUTTON",
+  "calls": 12
+ },
+ {
+  "reason": "FOCUS",
+  "fieldType": "start_addedToControlFieldStack",
+  "role": "CHECKBOX",
+  "calls": 14
+ },
+ {
+  "reason": "FOCUS",
+  "fieldType": "start_addedToControlFieldStack",
+  "role": "LABEL",
+  "calls": 7
+ },
+ {
+  "reason": "FOCUS",
+  "fieldType": "start_addedToControlFieldStack",
+  "role": "LINK",
+  "calls": 34
+ },
+ {
+  "reason": "FOCUS",
+  "fieldType": "start_addedToControlFieldStack",
+  "role": "PARAGRAPH",
+  "calls": 48
+ },
+ {
+  "reason": "FOCUS",
+  "fieldType": "start_inControlFieldStack",
+  "role": "DOCUMENT",
+  "calls": 60
+ },
+ {
+  "reason": "FOCUS",
+  "fieldType": "start_inControlFieldStack",
+  "role": "PARAGRAPH",
+  "calls": 12
+ },
+ {
+  "reason": "ONLYCACHE",
+  "fieldType": "end_inControlFieldStack",
+  "role": "DOCUMENT",
+  "calls": 8
+ },
+ {
+  "reason": "ONLYCACHE",
+  "fieldType": "end_inControlFieldStack",
+  "role": "EDITABLETEXT",
+  "calls": 10
+ },
+ {
+  "reason": "ONLYCACHE",
+  "fieldType": "end_inControlFieldStack",
+  "role": "GROUPING",
+  "calls": 30
+ },
+ {
+  "reason": "ONLYCACHE",
+  "fieldType": "end_inControlFieldStack",
+  "role": "LANDMARK",
+  "calls": 10
+ },
+ {
+  "reason": "ONLYCACHE",
+  "fieldType": "end_inControlFieldStack",
+  "role": "PARAGRAPH",
+  "calls": 8
+ },
+ {
+  "reason": "ONLYCACHE",
+  "fieldType": "end_inControlFieldStack",
+  "role": "SECTION",
+  "calls": 112
+ },
+ {
+  "reason": "ONLYCACHE",
+  "fieldType": "end_inControlFieldStack",
+  "role": "STATICTEXT",
+  "calls": 2
+ },
+ {
+  "reason": "ONLYCACHE",
+  "fieldType": "start_addedToControlFieldStack",
+  "role": "DOCUMENT",
+  "calls": 1
+ },
+ {
+  "reason": "ONLYCACHE",
+  "fieldType": "start_addedToControlFieldStack",
+  "role": "EDITABLETEXT",
+  "calls": 2
+ },
+ {
+  "reason": "ONLYCACHE",
+  "fieldType": "start_addedToControlFieldStack",
+  "role": "GROUPING",
+  "calls": 15
+ },
+ {
+  "reason": "ONLYCACHE",
+  "fieldType": "start_addedToControlFieldStack",
+  "role": "LANDMARK",
+  "calls": 2
+ },
+ {
+  "reason": "ONLYCACHE",
+  "fieldType": "start_addedToControlFieldStack",
+  "role": "PARAGRAPH",
+  "calls": 1
+ },
+ {
+  "reason": "ONLYCACHE",
+  "fieldType": "start_addedToControlFieldStack",
+  "role": "SECTION",
+  "calls": 14
+ },
+ {
+  "reason": "ONLYCACHE",
+  "fieldType": "start_addedToControlFieldStack",
+  "role": "STATICTEXT",
+  "calls": 1
+ },
+ {
+  "reason": "ONLYCACHE",
+  "fieldType": "start_inControlFieldStack",
+  "role": "DOCUMENT",
+  "calls": 7
+ },
+ {
+  "reason": "ONLYCACHE",
+  "fieldType": "start_inControlFieldStack",
+  "role": "EDITABLETEXT",
+  "calls": 8
+ },
+ {
+  "reason": "ONLYCACHE",
+  "fieldType": "start_inControlFieldStack",
+  "role": "GROUPING",
+  "calls": 15
+ },
+ {
+  "reason": "ONLYCACHE",
+  "fieldType": "start_inControlFieldStack",
+  "role": "LANDMARK",
+  "calls": 8
+ },
+ {
+  "reason": "ONLYCACHE",
+  "fieldType": "start_inControlFieldStack",
+  "role": "PARAGRAPH",
+  "calls": 7
+ },
+ {
+  "reason": "ONLYCACHE",
+  "fieldType": "start_inControlFieldStack",
+  "role": "SECTION",
+  "calls": 98
+ },
+ {
+  "reason": "ONLYCACHE",
+  "fieldType": "start_inControlFieldStack",
+  "role": "STATICTEXT",
+  "calls": 1
+ },
+ {
+  "reason": "QUICKNAV",
+  "fieldType": "end_inControlFieldStack",
+  "role": "DOCUMENT",
+  "calls": 40
+ },
+ {
+  "reason": "QUICKNAV",
+  "fieldType": "end_inControlFieldStack",
+  "role": "LINK",
+  "calls": 40
+ },
+ {
+  "reason": "QUICKNAV",
+  "fieldType": "end_inControlFieldStack",
+  "role": "PARAGRAPH",
+  "calls": 40
+ },
+ {
+  "reason": "QUICKNAV",
+  "fieldType": "start_addedToControlFieldStack",
+  "role": "LINK",
+  "calls": 40
+ },
+ {
+  "reason": "QUICKNAV",
+  "fieldType": "start_addedToControlFieldStack",
+  "role": "PARAGRAPH",
+  "calls": 40
+ },
+ {
+  "reason": "QUICKNAV",
+  "fieldType": "start_inControlFieldStack",
+  "role": "DOCUMENT",
+  "calls": 40
+ },
+ {
+  "reason": "SAYALL",
+  "fieldType": "end_inControlFieldStack",
+  "role": "BUTTON",
+  "calls": 2
+ },
+ {
+  "reason": "SAYALL",
+  "fieldType": "end_inControlFieldStack",
+  "role": "CHECKBOX",
+  "calls": 1
+ },
+ {
+  "reason": "SAYALL",
+  "fieldType": "end_inControlFieldStack",
+  "role": "DOCUMENT",
+  "calls": 62
+ },
+ {
+  "reason": "SAYALL",
+  "fieldType": "end_inControlFieldStack",
+  "role": "HEADING",
+  "calls": 8
+ },
+ {
+  "reason": "SAYALL",
+  "fieldType": "end_inControlFieldStack",
+  "role": "PARAGRAPH",
+  "calls": 54
+ },
+ {
+  "reason": "SAYALL",
+  "fieldType": "end_relative",
+  "role": "CHECKBOX",
+  "calls": 1
+ },
+ {
+  "reason": "SAYALL",
+  "fieldType": "end_relative",
+  "role": "LABEL",
+  "calls": 1
+ },
+ {
+  "reason": "SAYALL",
+  "fieldType": "end_relative",
+  "role": "LINK",
+  "calls": 10
+ },
+ {
+  "reason": "SAYALL",
+  "fieldType": "end_removedFromControlFieldStack",
+  "role": "BUTTON",
+  "calls": 2
+ },
+ {
+  "reason": "SAYALL",
+  "fieldType": "end_removedFromControlFieldStack",
+  "role": "CHECKBOX",
+  "calls": 1
+ },
+ {
+  "reason": "SAYALL",
+  "fieldType": "end_removedFromControlFieldStack",
+  "role": "HEADING",
+  "calls": 8
+ },
+ {
+  "reason": "SAYALL",
+  "fieldType": "end_removedFromControlFieldStack",
+  "role": "PARAGRAPH",
+  "calls": 20
+ },
+ {
+  "reason": "SAYALL",
+  "fieldType": "start_addedToControlFieldStack",
+  "role": "BUTTON",
+  "calls": 2
+ },
+ {
+  "reason": "SAYALL",
+  "fieldType": "start_addedToControlFieldStack",
+  "role": "CHECKBOX",
+  "calls": 2
+ },
+ {
+  "reason": "SAYALL",
+  "fieldType": "start_addedToControlFieldStack",
+  "role": "HEADING",
+  "calls": 6
+ },
+ {
+  "reason": "SAYALL",
+  "fieldType": "start_addedToControlFieldStack",
+  "role": "LABEL",
+  "calls": 1
+ },
+ {
+  "reason": "SAYALL",
+  "fieldType": "start_addedToControlFieldStack",
+  "role": "LINK",
+  "calls": 10
+ },
+ {
+  "reason": "SAYALL",
+  "fieldType": "start_addedToControlFieldStack",
+  "role": "PARAGRAPH",
+  "calls": 22
+ },
+ {
+  "reason": "SAYALL",
+  "fieldType": "start_inControlFieldStack",
+  "role": "DOCUMENT",
+  "calls": 62
+ },
+ {
+  "reason": "SAYALL",
+  "fieldType": "start_inControlFieldStack",
+  "role": "HEADING",
+  "calls": 2
+ },
+ {
+  "reason": "SAYALL",
+  "fieldType": "start_inControlFieldStack",
+  "role": "PARAGRAPH",
+  "calls": 32
+ }
+]
