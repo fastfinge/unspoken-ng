@@ -6,9 +6,15 @@
 # present in the built .nvda-addon -- `sconstruct` builds the bundle from
 # `addon/` alone. Do not add a runtime dependency here expecting it to ship.
 #
-#   uv run --group test pytest tests/
+# Groups:
+#   test    what CI's test job runs
+#   build   what CI's package job runs
 #
-# or, without uv:  python -m pip install pytest && python -m pytest tests/
+#   uv run --group test  pytest tests/
+#   uv run --group build scons
+#
+# tests/test_tooling.py checks these pins against .github/workflows/ci.yml, so
+# the two cannot drift apart silently.
 
 [project]
 name = "unspoken-ng"
@@ -22,3 +28,4 @@ package = false
 
 [dependency-groups]
 test = ["pytest==9.1.1"]
+build = ["SCons==4.10.1", "Markdown==3.10.2"]

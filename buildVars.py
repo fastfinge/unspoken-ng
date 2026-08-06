@@ -6,6 +6,28 @@
 # Full getext (please don't change)
 _ = lambda x : x
 
+import subprocess
+
+
+def _get_version():
+	"""Derive addon version from git tags.
+
+	- On exact tag: returns tag name (e.g. "2.1")
+	- Between tags: returns describe output (e.g. "2.0-51-g3b71875")
+	- No git / no tags: returns "dev"
+	"""
+	try:
+		result = subprocess.run(
+			["git", "describe", "--tags"],
+			capture_output=True,
+			text=True,
+		)
+		if result.returncode == 0:
+			return result.stdout.strip()
+	except FileNotFoundError:
+		pass
+	return "dev"
+
 # Add-on information variables
 addon_info = {
 	# for previously unpublished addons, please follow the community guidelines at:
@@ -18,8 +40,8 @@ addon_info = {
 	# Add-on description
 	# Translators: Long description to be shown for this add-on on add-on information from add-ons manager
 	"addon_description" : _("""Adds 3D audio for controls and replaces control messages. This updated version uses OpenAL Soft and is only compatible with NVDA 2026.1 and later."""),
-	# version
-	"addon_version" : "2.0",
+	# version, stamped from git tags at build time
+	"addon_version" : _get_version(),
 	# Author(s)
 	"addon_author" : "Camlorn <camlorn38@gmail.com>, Bryan Smart< Bryansmart@bryansmart.com>, Masonasons <mason@masonasons.me>, Tyler Spivey, Samuel Proulx, Ambro86, akj",
 	# URL for the add-on documentation support
@@ -27,7 +49,7 @@ addon_info = {
 	# Documentation file name
 	"addon_docFileName" : "readme.html",
 	"addon_minimum_nvda_version" : "2026.1",
-	"addon_last_tested_nvda_version" : "2026.1",
+	"addon_last_tested_nvda_version" : "2026.3",
 }
 
 
@@ -45,4 +67,7 @@ i18nSources = pythonSources + ["buildVars.py", "docHandler.py"]
 
 # Files that will be ignored when building the nvda-addon file
 # Paths are relative to the addon directory, not to the root directory of your addon sources.
-excludedFiles = []
+excludedFiles = [
+	# Add exact addon-relative paths here. Python bytecode and all files inside
+	# __pycache__ directories are excluded unconditionally by sconstruct.
+]

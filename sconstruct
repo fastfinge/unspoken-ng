@@ -85,24 +85,39 @@ def createAddonHelp(dir):
 		cssPath = os.path.join(docsDir, "style.css")
 		cssTarget = env.Command(cssPath, "style.css", Copy("$TARGET", "$SOURCE"))
 		env.Depends(addon, cssTarget)
-	if os.path.isfile("readme.md"):
+	# Source is README.md (the name git tracks); the copy keeps the lowercase
+	# name because the markdown builder below turns readme.md into the
+	# readme.html that buildVars.addon_docFileName points at. Matching the
+	# tracked case matters on a case-sensitive filesystem, where "readme.md"
+	# finds nothing and the user guide silently leaves the bundle.
+	if os.path.isfile("README.md"):
 		readmePath = os.path.join(docsDir, "en", "readme.md")
-		readmeTarget = env.Command(readmePath, "readme.md", Copy("$TARGET", "$SOURCE"))
+		readmeTarget = env.Command(readmePath, "README.md", Copy("$TARGET", "$SOURCE"))
 		env.Depends(addon, readmeTarget)
 
+
+
+def isExcludedFromAddon(pathInBundle):
+	"""Return whether an addon-relative path must be excluded from the bundle."""
+	pathComponents = os.path.normpath(pathInBundle).split(os.sep)
+	return (
+		pathInBundle.lower().endswith(".pyc")
+		or "__pycache__" in pathComponents
+		or pathInBundle in buildVars.excludedFiles
+	)
 
 
 def createAddonBundleFromPath(path, dest):
 	""" Creates a bundle from a directory that contains an addon manifest file."""
 	basedir = os.path.abspath(path)
 	with zipfile.ZipFile(dest, 'w', zipfile.ZIP_DEFLATED) as z:
-		# FIXME: the include/exclude feature may or may not be useful. Also python files can be pre-compiled.
 		for dir, dirnames, filenames in os.walk(basedir):
 			relativePath = os.path.relpath(dir, basedir)
 			for filename in filenames:
 				pathInBundle = os.path.join(relativePath, filename)
 				absPath = os.path.join(dir, filename)
-				if pathInBundle not in buildVars.excludedFiles: z.write(absPath, pathInBundle)
+				if not isExcludedFromAddon(pathInBundle):
+					z.write(absPath, pathInBundle)
 	return dest
 
 def generateManifest(source, dest):
@@ -169,6 +184,10 @@ env.Depends(mergePot, i18nFiles)
 manifest = env.NVDAManifest(os.path.join("addon", "manifest.ini"), os.path.join("manifest.ini.tpl"))
 # Ensure manifest is rebuilt if buildVars is updated.
 env.Depends(manifest, "buildVars.py")
+# addon_version comes from `git describe` at buildVars import time. That value is
+# not captured by the content signature of buildVars.py, so without an explicit
+# dependency SCons caches a stale version in manifest.ini when HEAD moves.
+env.Depends(manifest, env.Value(buildVars.addon_info["addon_version"]))
 
 env.Depends(addon, manifest)
 env.Default(addon)

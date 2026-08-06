@@ -2,7 +2,11 @@ addon/doc/*.css
 addon/doc/en/
 *_docHandler.py
 *.html
+# The smoke checklist's test page is authored, not generated: the *.html rule
+# above exists for scons's readme.html output, and would otherwise swallow it.
+!/docs/smoke-test-page.html
 *.ini
+!/pytest.ini
 *.mo
 *.pot
 *.pyc
@@ -11,3 +15,6 @@ addon/doc/en/
 *.zip
 .sconsign.dblite
 .vscode/
+
+# Build output: generated from manifest.ini.tpl with the git-describe version
+addon/manifest.ini
