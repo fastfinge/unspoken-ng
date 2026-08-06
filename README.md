@@ -93,7 +93,7 @@ python -m pytest tests/
 ## Known Issues
 
 If you would like to fix any of these issues, pull requests will be happily and gratefully accepted:
-1. No translation support: it's unclear to me what needs to happen here. I need to make some kind of cloud account for some sort of crowd service or something?
+1. Translations exist in the code but not yet in practice: every user-visible string is gettext-wrapped and the build generates a `.pot` catalog, but no translation platform is wired up, so no translated catalogs ship yet. What remains is a place for translators to contribute (for instance the NVDA add-on community's translation workflow).
 
 Fixed in 2.0: Unspoken-ng used to play no sound while arrowing through some controls on the web, because a control's position was unavailable until focus moved to it and NVDA no longer moves system focus with the browse cursor. Browse-mode reading now has its own path and does not wait on focus.
 
