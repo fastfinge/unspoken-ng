@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Unspoken-ng smoke test page</title>
+<style>
+  body { font: 16px/1.6 system-ui, sans-serif; margin: 0; padding: 1rem; }
+  /* Three columns pinned to the left edge, the centre and the right edge:
+     role sounds must be heard where the control is, so the page has to put
+     controls somewhere a listener can disagree with. */
+  .row { display: flex; justify-content: space-between; gap: 1rem; margin: 1.5rem 0; }
+  .row > * { flex: 0 0 auto; }
+  .tall { min-height: 60vh; }
+</style>
+</head>
+<body>
+
+<h1>Unspoken-ng smoke test page</h1>
+
+<p>Plain paragraph text. Arrowing through this line must produce
+<strong>no</strong> role sound — only controls do.</p>
+
+<div class="row">
+  <a href="#left">Far left link</a>
+  <a href="#centre">Centre link</a>
+  <a href="#right">Far right link</a>
+</div>
+
+<div class="row">
+  <button type="button">Far left button</button>
+  <button type="button">Centre button</button>
+  <button type="button">Far right button</button>
+</div>
+
+<div class="row">
+  <label><input type="checkbox"> Far left checkbox</label>
+  <label><input type="checkbox"> Centre checkbox</label>
+  <label><input type="checkbox"> Far right checkbox</label>
+</div>
+
+<div class="row">
+  <label>Edit field <input type="text" value=""></label>
+  <label>Combo box
+    <select><option>One</option><option>Two</option><option>Three</option></select>
+  </label>
+  <label>Slider <input type="range" min="0" max="10" value="5"></label>
+</div>
+
+<h2 id="left">A heading, so heading quicknav has somewhere to go</h2>
+
+<ul>
+  <li>List item one</li>
+  <li>List item two, with an <a href="#centre">inline link</a> mid-sentence</li>
+  <li>List item three</li>
+</ul>
+
+<h2 id="centre">Enough prose for a say all</h2>
+
+<p>Say all needs more than a screenful, and it needs controls scattered through
+the prose so the sounds land inside the reading rather than at the end of it.
+This paragraph is filler; the <a href="#right">link in this sentence</a> is not.</p>
+
+<p>Another filler paragraph, with a <button type="button">button in the flow</button>
+so that say all crosses a control that is not a link. The point of the filler is
+length: a say all that finishes in two seconds proves nothing about whether
+sounds keep arriving.</p>
+
+<p>A third filler paragraph, ending with a
+<label><input type="checkbox"> checkbox in the flow</label> for the same reason.</p>
+
+<div class="tall"></div>
+
+<h2 id="right">Bottom of the page</h2>
+
+<p>The tall spacer above exists so that some controls sit near the top of the
+screen and some near the bottom: elevation is part of the position, and a page
+that fits on one screen cannot show it.</p>
+
+<div class="row">
+  <a href="#top">Bottom left link</a>
+  <a href="#top">Bottom centre link</a>
+  <a href="#top">Bottom right link</a>
+</div>
+
+</body>
+</html>

@@ -269,6 +269,12 @@ def test_a_broken_default_loads_to_nothing_so_the_session_degrades(library):
     assert library.load("default") == {}
     assert library.load("anything") == {}
 
+    import playback
+
+    assert not playback.can_produce_role_sound(
+        {"engine_ready": True, "device_open": True, "slots_loaded": 0}
+    )
+
 
 def test_discover_uses_bundled_collision_when_user_theme_is_unusable(
     theme_roots,
