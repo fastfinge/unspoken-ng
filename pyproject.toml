@@ -1,0 +1,24 @@
+# Development tooling only.
+#
+# THE ADDON ITSELF HAS NO DEPENDENCIES. It runs inside NVDA's bundled Python
+# and uses nothing but the standard library and ctypes against the bundled
+# soft_oal.dll. Nothing declared here is installed into, required by, or
+# present in the built .nvda-addon -- `sconstruct` builds the bundle from
+# `addon/` alone. Do not add a runtime dependency here expecting it to ship.
+#
+#   uv run --group test pytest tests/
+#
+# or, without uv:  python -m pip install pytest && python -m pytest tests/
+
+[project]
+name = "unspoken-ng"
+version = "2.0"
+description = "Development tooling for the unspoken-ng NVDA addon (not the addon itself)"
+requires-python = ">=3.13"
+dependencies = []
+
+[tool.uv]
+package = false
+
+[dependency-groups]
+test = ["pytest==9.1.1"]
