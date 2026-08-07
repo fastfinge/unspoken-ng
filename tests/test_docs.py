@@ -25,7 +25,7 @@ BUILD_VARS = (REPO / "buildVars.py").read_text(encoding="utf-8")
 ADR_DIR = REPO / "docs" / "adr"
 
 
-# --- the four settings -----------------------------------------------------
+# --- the five settings -----------------------------------------------------
 
 
 def test_readme_documents_every_setting_in_the_spec(settings):
@@ -34,6 +34,7 @@ def test_readme_documents_every_setting_in_the_spec(settings):
         "theme": "Sound theme",
         "roleAnnouncement": "Role announcement",
         "reverb": "Reverb",
+        "volume": "Sound volume",
         "silenceDuringSayAll": "Silence role sounds during say all",
     }
     assert set(labels) == set(settings.CONF_SPEC), (
