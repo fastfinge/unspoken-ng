@@ -61,6 +61,17 @@ crash, a device-follow split across the boundary, and two artifacts to build, pa
   player's own constructor, and records the process-global caveat that does bite. The glitch soak in
   [#40](https://github.com/akj/unspoken-ng/issues/40) kept `periods = 2` as the shipped default; the
   run evidence lives on that issue.
+- **`ALSOFT_CONF` also carries the HRTF requirements**, because it is the highest-priority config
+  source on Windows and therefore the only place the addon can state them and not be overridden.
+  The `ALC_HRTF_SOFT` context attribute is necessary but *not* sufficient: an explicit user-level
+  `alsoft.ini` outranks an application's request, so the config restates it as
+  `stereo-encoding = hrtf` (the 1.23+ spelling; `hrtf = true` is deprecated). Alongside it,
+  `hrtf-mode = full` buys per-source HRIR filtering — the ambisonic modes exist to give a
+  many-source scene a fixed cost and pay for it in exactly the elevation and front/back cues this
+  addon sells, which a 12-voice pool has no reason to trade away — and `channels = stereo` keeps
+  HRTF reachable at all, since it is declined outright on an endpoint Windows has configured as
+  5.1/7.1. Whether it ended up on is not assumed: `ALC_HRTF_STATUS_SOFT` is logged at construction
+  and after every reopen, so a denial names its cause.
 - **`alcReopenDeviceSOFT` blocks for 31–470 ms** and must never run on NVDA's main thread.
 - **The loopback justification is discharged.** `openal_audio.py`'s docstring defends loopback as
   "preserving NVDA ducking and device routing"; ducking no longer applies on any branch, and device

@@ -230,8 +230,82 @@ def test_alsoft_conf_is_written_before_the_dll_is_loaded(make_player, monkeypatc
     config_path = os.environ["ALSOFT_CONF"]
     assert seen["ALSOFT_CONF"] == config_path
     assert config_path != str(stale), "the prior value must be overwritten, not respected"
-    assert Path(config_path).read_text(encoding="utf-8") == "[general]\nperiods = 2\n"
+    assert Path(config_path).read_text(encoding="utf-8") == player.ALSOFT_CONF_BODY
     assert stale.name in caplog.text, "the prior ALSOFT_CONF value is the tripwire; it must be logged"
+
+
+def test_alsoft_conf_states_the_rendering_requirements_no_api_call_can_state(make_player):
+    """`ALSOFT_CONF` is the highest-priority config source, so these belong here.
+
+    Pinned by value, not by shape: each line is load-bearing and silently
+    reversible by a user-level `alsoft.ini` if it goes missing. `stereo-encoding`
+    must be the 1.23+ spelling -- `hrtf = true` is deprecated and soft_oal warns
+    on it.
+    """
+    body = player.ALSOFT_CONF_BODY
+    assert body.startswith("[general]\n")
+    assert "\nperiods = 2\n" in body, "the one latency knob (spec §3)"
+    assert "\nstereo-encoding = hrtf\n" in body
+    assert "\nhrtf = " not in body, "the pre-1.23 spelling is deprecated"
+    assert "\nhrtf-mode = full\n" in body, "per-source HRIR; ambiN blurs elevation and front/back"
+    assert "\nchannels = stereo\n" in body, "HRTF is declined outright on a non-stereo device"
+
+
+def test_hrtf_is_active_on_the_real_device(make_player, caplog):
+    """The whole point of the addon, asserted against the bundled soft_oal.
+
+    Skips rather than fails where the machine genuinely cannot render it -- a
+    CI runner with no stereo endpoint is not a broken build -- but a *denied*
+    request is, because that means our own config stopped restating it.
+    """
+    caplog.set_level(logging.DEBUG)
+    adapter = make_player()
+
+    enabled = ctypes.c_int(0)
+    status = ctypes.c_int(0)
+    adapter._al.alcGetIntegerv(adapter._device, player.ALC_HRTF_SOFT, 1, ctypes.byref(enabled))
+    adapter._al.alcGetIntegerv(
+        adapter._device, player.ALC_HRTF_STATUS_SOFT, 1, ctypes.byref(status)
+    )
+    reason = player.HRTF_STATUS_NAMES.get(status.value, status.value)
+
+    assert status.value != 0x0002, f"HRTF was denied ({reason}); ALSOFT_CONF is not winning"
+    if not enabled.value:
+        pytest.skip(f"this machine cannot render HRTF: {reason}")
+    assert "HRTF active" in caplog.text, "an active HRTF must name its dataset in the log"
+
+
+def test_a_device_without_hrtf_says_why_rather_than_just_that(make_player, caplog, monkeypatch):
+    """The warning has to carry the cause; "not active" alone is unactionable."""
+    caplog.set_level(logging.DEBUG)
+    adapter = make_player()
+
+    def unsupported_format(device, token, size, values):
+        # ALC_HRTF_SOFT -> false, ALC_HRTF_STATUS_SOFT -> the endpoint is not stereo.
+        # `values` arrives as a byref object, which has to be cast to be written.
+        target = ctypes.cast(values, ctypes.POINTER(ctypes.c_int))
+        target[0] = 0x0005 if token == player.ALC_HRTF_STATUS_SOFT else 0
+        return None
+
+    monkeypatch.setattr(adapter._al, "alcGetIntegerv", unsupported_format)
+    caplog.clear()
+    adapter._log_hrtf_state()
+
+    assert "not active" in caplog.text
+    assert "not stereo" in caplog.text, "the status must reach the log as a cause, not a number"
+
+
+def test_reading_the_hrtf_state_can_never_break_construction(make_player, monkeypatch, caplog):
+    """Diagnostics only: HRTF being unreadable makes the addon worse, not broken."""
+    caplog.set_level(logging.DEBUG)
+    adapter = make_player()
+
+    def angry(*args, **kwargs):
+        raise OSError("the driver went away mid-query")
+
+    monkeypatch.setattr(adapter._al, "alcGetIntegerv", angry)
+    assert adapter._log_hrtf_state() is None
+    assert "could not read the HRTF state" in caplog.text
 
 
 def test_a_named_device_that_will_not_open_falls_back_to_the_default(make_player, caplog):

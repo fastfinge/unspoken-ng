@@ -175,7 +175,29 @@ class SilentSoundPlayer:
 ALC_NO_ERROR = 0
 ALC_CONNECTED = 0x313
 ALC_ALL_DEVICES_SPECIFIER = 0x1013
+
+# ALC_SOFT_HRTF
 ALC_HRTF_SOFT = 0x1992
+ALC_HRTF_STATUS_SOFT = 0x1993
+ALC_HRTF_SPECIFIER_SOFT = 0x1995
+
+#: `ALC_HRTF_STATUS_SOFT` values, and what each one means for a user who has
+#: just reported "it does not sound spatial". The status is the only thing that
+#: distinguishes a request OpenAL Soft ignored from one it could not honour, and
+#: the two have different fixes.
+HRTF_STATUS_NAMES = {
+    0x0000: "disabled",
+    0x0001: "enabled",
+    # Something outranked our request. In practice that is a user-level
+    # alsoft.ini setting `stereo-encoding` to something other than `hrtf`:
+    # an explicit config value beats the application's ALC attribute.
+    0x0002: "denied (an alsoft.ini is overriding the request)",
+    0x0003: "required",
+    0x0004: "enabled (headphones detected)",
+    # The device is not stereo -- typically an endpoint configured as 5.1/7.1
+    # in Windows' sound settings. HRTF only renders to two channels.
+    0x0005: "unsupported output format (the endpoint is not stereo)",
+}
 
 # ALC_SOFT_system_events (soft_oal 1.23+)
 ALC_PLAYBACK_DEVICE_SOFT = 0x19D4
@@ -250,9 +272,38 @@ RAMP_ZERO_HOLD_TICKS = 3
 #: which OpenAL spells as a NULL device name.
 DEFAULT_DEVICE_NAMES = frozenset({None, "", "default"})
 
-#: `[general] periods = 2` is the one latency knob (spec §3): a 22 ms buffer,
-#: the WASAPI shared-mode floor. Minimal file, nothing else in it.
-ALSOFT_CONF_BODY = "[general]\nperiods = 2\n"
+#: Everything OpenAL Soft has to be told that no API call can tell it.
+#:
+#: `periods = 2` is the one latency knob (spec §3): a 22 ms buffer, the WASAPI
+#: shared-mode floor.
+#:
+#: The other three are here because `ALSOFT_CONF` is the *highest-priority*
+#: config source on Windows, which makes this file the only place the addon can
+#: state its rendering requirements and not be overridden:
+#:
+#: - `stereo-encoding = hrtf` restates the `ALC_HRTF_SOFT` context attribute in
+#:   config form. The attribute alone is not enough: an explicit user-level
+#:   setting outranks the application's request, so a stale
+#:   `%APPDATA%\alsoft.ini` carrying `stereo-encoding = panpot` would silently
+#:   turn the addon's whole point off. (`general/hrtf` is the pre-1.23 spelling
+#:   and is deprecated; soft_oal logs a warning if it sees it.)
+#: - `hrtf-mode = full` runs a per-source HRIR pair instead of mixing into an
+#:   ambisonic bus and decoding that once. The ambisonic modes (`ambi1`..`ambi4`,
+#:   default `ambi2`) exist so a game with dozens of sources pays a fixed cost,
+#:   and they buy it by blurring exactly the cues this addon sells -- elevation
+#:   and front/back. We cap at `VOICE_CAP + RAMP_HEADROOM` short mono voices, so
+#:   per-source is affordable and accuracy wins.
+#: - `channels = stereo` keeps HRTF reachable at all: it is declined outright on
+#:   a non-stereo device, so an endpoint configured as 5.1/7.1 in Windows would
+#:   otherwise defeat it. This is our own device, not a shared stream, so
+#:   forcing two channels costs the user's surround setup nothing.
+ALSOFT_CONF_BODY = (
+    "[general]\n"
+    "periods = 2\n"
+    "stereo-encoding = hrtf\n"
+    "hrtf-mode = full\n"
+    "channels = stereo\n"
+)
 ALSOFT_CONF_FILENAME = "unspoken-ng-alsoft.ini"
 
 
@@ -589,10 +640,48 @@ class OpenALSoundPlayer:
         self._context = context
         if not self._al.alcMakeContextCurrent(context):
             raise RuntimeError("Unspoken: alcMakeContextCurrent failed")
-        hrtf = ctypes.c_int(0)
-        self._al.alcGetIntegerv(self._device, ALC_HRTF_SOFT, 1, ctypes.byref(hrtf))
-        if not hrtf.value:
-            log.warning("Unspoken: HRTF is not active on this device; role sounds will only be panned")
+        self._log_hrtf_state()
+
+    def _log_hrtf_state(self) -> None:
+        """Record whether HRTF is rendering and, when it is not, why.
+
+        Diagnostics only, and total: HRTF being off makes the addon worse, not
+        broken, so nothing here may fail construction or interrupt the worker's
+        device servicing. It runs after every successful reopen as well as at
+        construction, because the answer changes with the device -- plugging in
+        headphones is the case the user is most likely to ask about.
+
+        `ALC_HRTF_SOFT` is a bare boolean, which was enough to say "not active"
+        and nothing a user could act on. `ALC_HRTF_STATUS_SOFT` names the cause,
+        and the causes have different fixes (see `HRTF_STATUS_NAMES`).
+        """
+        try:
+            enabled = ctypes.c_int(0)
+            status = ctypes.c_int(0)
+            self._al.alcGetIntegerv(self._device, ALC_HRTF_SOFT, 1, ctypes.byref(enabled))
+            self._al.alcGetIntegerv(self._device, ALC_HRTF_STATUS_SOFT, 1, ctypes.byref(status))
+            reason = HRTF_STATUS_NAMES.get(status.value, f"unknown status {status.value:#x}")
+            if enabled.value:
+                # The specifier names the dataset that actually loaded, which is
+                # what distinguishes "HRTF on" from "HRTF on, using the built-in
+                # table because a configured one was unreadable".
+                dataset = self._alc_string(ALC_HRTF_SPECIFIER_SOFT)
+                log.debug(f"Unspoken: HRTF active -- {reason}, dataset {dataset!r}")
+            else:
+                log.warning(
+                    f"Unspoken: HRTF is not active on this device ({reason}); "
+                    "role sounds will only be panned"
+                )
+        except Exception as error:
+            self._log_once("hrtf_state", f"Unspoken: could not read the HRTF state: {error}")
+        finally:
+            # These queries are the only ALC ones whose enum an older soft_oal
+            # could reject. ALC errors are sticky per device, so clear rather
+            # than leave one for an unrelated reader to find.
+            try:
+                self._al.alcGetError(self._device)
+            except Exception:
+                pass
 
     def _create_voice_pool(self) -> None:
         count = VOICE_CAP + RAMP_HEADROOM
@@ -1096,6 +1185,9 @@ class OpenALSoundPlayer:
         was_disconnected = self._disconnected
         self._disconnected = False
         self._update_playable()
+        # A reopen can land on a device that renders HRTF differently, or not at
+        # all; the old log line only ever described the device at construction.
+        self._log_hrtf_state()
         message = (
             f"Unspoken: Sound Player now on {self._device_description()!r} ({elapsed_ms:.0f} ms)"
         )
@@ -1221,9 +1313,12 @@ class OpenALSoundPlayer:
         if error != AL_NO_ERROR:
             log.warning(f"Unspoken: OpenAL error {error:#x} after {what}")
 
-    def _device_description(self) -> str | None:
-        pointer = self._al.alcGetString(self._device, ALC_ALL_DEVICES_SPECIFIER)
+    def _alc_string(self, token: int) -> str | None:
+        pointer = self._al.alcGetString(self._device, token)
         return ctypes.string_at(pointer).decode("utf-8", "replace") if pointer else None
+
+    def _device_description(self) -> str | None:
+        return self._alc_string(ALC_ALL_DEVICES_SPECIFIER)
 
     def _log_once(self, key: str, message: str, level: str = "error") -> None:
         """Log a repeatable condition once; a per-play log line is its own bug."""
