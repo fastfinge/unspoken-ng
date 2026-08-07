@@ -1,6 +1,6 @@
 """Spec section 8's configuration surface, declared once.
 
-These are the four keys of ``config.conf["unspoken"]``. The allowed values,
+These are the five keys of ``config.conf["unspoken"]``. The allowed values,
 the defaults, and the ConfigObj spec NVDA validates against all derive from
 the declarations here, so adding a key or a value is a change to this file
 alone.
@@ -23,10 +23,11 @@ DEFAULTS = {
     "theme": "default",
     "roleAnnouncement": "sounds",
     "reverb": "smallRoom",
+    "volume": 100,
     "silenceDuringSayAll": False,
 }
 
-#: The four config keys, in the panel's order.
+#: The five config keys, in the panel's order.
 CONFIG_KEYS = tuple(DEFAULTS)
 
 
@@ -43,5 +44,6 @@ CONF_SPEC = {
         ROLE_ANNOUNCEMENT_VALUES, DEFAULTS["roleAnnouncement"]
     ),
     "reverb": _option(REVERB_PRESETS, DEFAULTS["reverb"]),
+    "volume": "integer(default=100, min=0, max=100)",
     "silenceDuringSayAll": f'boolean(default={DEFAULTS["silenceDuringSayAll"]})',
 }

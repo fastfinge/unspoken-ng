@@ -6,6 +6,24 @@ import volume
 
 
 @pytest.mark.parametrize(
+    "value,expected",
+    [
+        (None, 1.0),
+        ("abc", 1.0),
+        (float("nan"), 1.0),
+        (-5, 0.0),
+        (150, 1.0),
+        (50, 0.5),
+        ("75", 0.75),
+        (0, 0.0),
+        (100, 1.0),
+    ],
+)
+def test_gain_from_percent(value, expected):
+    assert volume.gain_from_percent(value) == expected
+
+
+@pytest.mark.parametrize(
     "sound_volume,follows_voice,synth_volume,expected",
     [
         # Not following the voice: the sound volume, whatever the synth is at.

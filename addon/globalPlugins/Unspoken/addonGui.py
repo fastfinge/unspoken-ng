@@ -1,9 +1,10 @@
-"""The Unspoken-ng settings panel: four controls, sound theme first (spec §8)."""
+"""The Unspoken-ng settings panel: five controls, sound theme first (spec §8)."""
 
 import addonHandler
 import config
 import gui
 import wx
+from gui import nvdaControls
 
 from . import settings
 
@@ -110,6 +111,19 @@ def reverb_value_for_index(index):
 	return settings.DEFAULTS["reverb"]
 
 
+def volume_slider_position(value):
+	"""Clamp a stored volume percentage to the slider's 0-100 range.
+
+	Garbage input means full volume, matching the playback conversion's
+	failure philosophy.
+	"""
+	try:
+		percent = int(value)
+	except (TypeError, ValueError):
+		return settings.DEFAULTS["volume"]
+	return max(0, min(100, percent))
+
+
 class SettingsPanel(gui.settingsDialogs.SettingsPanel):
 	#: Bound by `register` onto the class NVDA constructs; see its docstring.
 	_themes = None
@@ -160,6 +174,18 @@ class SettingsPanel(gui.settingsDialogs.SettingsPanel):
 		)
 		self.reverbChoice.Bind(wx.EVT_CHOICE, self.onReverbChanged)
 
+		# Translators: The label of a slider that sets the volume of role sounds.
+		self.volumeSlider = sHelper.addLabeledControl(
+			_("Sound vol&ume:"),
+			nvdaControls.EnhancedInputSlider,
+			minValue=0,
+			maxValue=100,
+		)
+		self.volumeSlider.SetValue(
+			volume_slider_position(self._priorSettings.get("volume"))
+		)
+		self.volumeSlider.Bind(wx.EVT_SLIDER, self.onVolumeChanged)
+
 		# This silences role sounds only; whether roles are spoken during say all
 		# stays governed by Role announcement (spec §8, deliberate per #10/#15).
 		self.silenceDuringSayAllCheckBox = sHelper.addItem(
@@ -184,6 +210,16 @@ class SettingsPanel(gui.settingsDialogs.SettingsPanel):
 	def onReverbChanged(self, event):
 		self._preview.preview_reverb(self._selectedReverbPreset())
 
+	# Volume is pulled from config on every play, so writing it through here is
+	# the whole live preview: the next role sound, including those this dialog's
+	# own focus changes fire, plays at the new level. `onDiscard` puts the saved
+	# value back exactly as it does for every other key.
+	def onVolumeChanged(self, event):
+		try:
+			config.conf["unspoken"]["volume"] = self.volumeSlider.GetValue()
+		except KeyError:
+			pass
+
 	def onSave(self):
 		section = config.conf["unspoken"]
 		section["theme"] = self._selectedThemeId()
@@ -191,6 +227,7 @@ class SettingsPanel(gui.settingsDialogs.SettingsPanel):
 			self.roleAnnouncementChoice.GetSelection()
 		)
 		section["reverb"] = self._selectedReverbPreset()
+		section["volume"] = self.volumeSlider.GetValue()
 		section["silenceDuringSayAll"] = self.silenceDuringSayAllCheckBox.IsChecked()
 		# The theme and reverb preset are already live; saving must not re-apply
 		# them. Saving is also what Apply does, and the dialog stays open
@@ -206,6 +243,7 @@ class SettingsPanel(gui.settingsDialogs.SettingsPanel):
 		# NVDA's own driver settings panel unbinds for this reason.
 		self.themeChoice.Unbind(wx.EVT_CHOICE)
 		self.reverbChoice.Unbind(wx.EVT_CHOICE)
+		self.volumeSlider.Unbind(wx.EVT_SLIDER)
 
 		section = config.conf["unspoken"]
 		for key, value in self._priorSettings.items():
@@ -217,7 +255,7 @@ class SettingsPanel(gui.settingsDialogs.SettingsPanel):
 		self._preview.revert(self._priorThemeId, self._priorReverbPreset)
 
 	def _readSettings(self):
-		"""Snapshot the four settings, tolerating a config spec not yet registered.
+		"""Snapshot the five settings, tolerating a config spec not yet registered.
 
 		Keys that are missing are simply absent from the snapshot; the choice
 		helpers then fall back to the spec §8 defaults, so the panel still

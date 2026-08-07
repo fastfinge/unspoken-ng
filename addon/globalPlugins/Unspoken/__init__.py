@@ -114,10 +114,13 @@ class _NVDASettingsProvider:
     The player reads both properties on NVDA's main thread inside `play`, once
     each, ahead of `alSourcePlay`. So both have to be cheap and neither may
     block. Counted in ConfigObj subscripts: `output_device` is 2
-    (`conf["audio"]["outputDevice"]`); `volume` is 3, or **7** with "sound
+    (`conf["audio"]["outputDevice"]`); `volume` is 5, or **9** with "sound
     volume follows voice" on, plus the arithmetic in
-    `volume.effective_volume`. Every one of them is a dict lookup against an
-    already-parsed section.
+    `volume.effective_volume` and `volume.gain_from_percent`. Every one of them
+    is a dict lookup against an already-parsed section.
+
+    The addon slider multiplies on top of NVDA's rule, so NVDA's Audio
+    settings and the panel slider compose rather than compete.
 
     `volume` additionally reads the synth's volume when the user has turned on
     "sound volume follows voice", and it reads it *from config* rather than
@@ -144,10 +147,13 @@ class _NVDASettingsProvider:
     def volume(self):
         audio = config.conf["audio"]
         follows_voice = audio["soundVolumeFollowsVoice"]
-        return volume.effective_volume(
+        nvda_gain = volume.effective_volume(
             audio["soundVolume"],
             follows_voice,
             _synth_volume() if follows_voice else None,
+        )
+        return nvda_gain * volume.gain_from_percent(
+            config.conf["unspoken"]["volume"]
         )
 
 
@@ -236,7 +242,7 @@ def _migrate_legacy_config():
 
     Only the profiles *active at startup* are visible here. A profile that is
     activated later in the session is not migrated: its legacy keys mean
-    nothing to the new spec, so the four settings fall through to the base
+    nothing to the new spec, so the five settings fall through to the base
     profile and the spec defaults until the next NVDA start migrates it.
     """
     try:
@@ -288,7 +294,7 @@ def _migrate_legacy_config():
         # anyone who has that turned off.
         config.conf.save()
         log.info(
-            f"Unspoken: migrated legacy settings onto the four-key config "
+            f"Unspoken: migrated legacy settings onto the five-key config "
             f"({len(migrated)} profile(s))"
         )
     except Exception:

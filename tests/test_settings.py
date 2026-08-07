@@ -18,6 +18,7 @@ def test_conf_spec_matches_the_configuration_schema():
         "reverb": (
             'option("none", "smallRoom", "mediumRoom", "hall", default="smallRoom")'
         ),
+        "volume": "integer(default=100, min=0, max=100)",
         "silenceDuringSayAll": "boolean(default=False)",
     }
 
@@ -27,6 +28,7 @@ def test_defaults_cover_exactly_the_config_keys():
         "theme",
         "roleAnnouncement",
         "reverb",
+        "volume",
         "silenceDuringSayAll",
     )
     assert set(settings.DEFAULTS) == set(settings.CONFIG_KEYS)

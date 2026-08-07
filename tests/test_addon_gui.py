@@ -2,9 +2,9 @@
 
 The panel is exercised for real: wx and NVDA's gui helpers are replaced with
 fakes that keep the parts NVDA's contract depends on — label association
-through ``BoxSizerHelper``, ``EVT_CHOICE`` bindings, and combo selections — so
-``makeSettings``, ``onSave`` and ``onDiscard`` run as written rather than being
-skipped as "untestable".
+through ``BoxSizerHelper``, choice and slider bindings, and control values —
+so ``makeSettings``, ``onSave`` and ``onDiscard`` run as written rather than
+being skipped as "untestable".
 """
 
 import importlib
@@ -113,6 +113,36 @@ class _FakeCheckBox:
 		return self.value
 
 
+class _FakeSlider:
+	"""Stands in for EnhancedInputSlider, including its change event."""
+
+	def __init__(self, parent, minValue=0, maxValue=100):
+		self.parent = parent
+		self.minValue = minValue
+		self.maxValue = maxValue
+		self.value = minValue
+		self.handlers = {}
+
+	def SetValue(self, value):
+		self.value = value
+
+	def GetValue(self):
+		return self.value
+
+	def Bind(self, event, handler):
+		self.handlers[event] = handler
+
+	def Unbind(self, event):
+		self.handlers.pop(event, None)
+
+	def slide(self, value, event):
+		"""Move to ``value`` the way a keyboard user does, then fire the event."""
+		self.value = value
+		handler = self.handlers.get(event)
+		assert handler is not None, "control has no handler bound for this event"
+		handler(None)
+
+
 class _FakeBoxSizerHelper:
 	"""Records what NVDA's guiHelper would build, keeping label association."""
 
@@ -148,6 +178,7 @@ def _addon_gui(conf=None):
 	wx_stub.Choice = _FakeChoice
 	wx_stub.CheckBox = _FakeCheckBox
 	wx_stub.EVT_CHOICE = object()
+	wx_stub.EVT_SLIDER = object()
 
 	gui_stub = ModuleType("gui")
 	gui_stub.settingsDialogs = SimpleNamespace(
@@ -155,6 +186,7 @@ def _addon_gui(conf=None):
 		NVDASettingsDialog=SimpleNamespace(categoryClasses=[]),
 	)
 	gui_stub.guiHelper = SimpleNamespace(BoxSizerHelper=_FakeBoxSizerHelper)
+	gui_stub.nvdaControls = SimpleNamespace(EnhancedInputSlider=_FakeSlider)
 
 	config_stub = ModuleType("config")
 	config_stub.conf = conf
@@ -317,6 +349,21 @@ def test_reverb_value_for_index(addon_gui, index, expected_value):
 	assert addon_gui.reverb_value_for_index(index) == expected_value
 
 
+@pytest.mark.parametrize(
+	("value", "expected"),
+	[
+		(None, 100),
+		("abc", 100),
+		(-5, 0),
+		(150, 100),
+		("75", 75),
+		(0, 0),
+	],
+)
+def test_volume_slider_position(addon_gui, value, expected):
+	assert addon_gui.volume_slider_position(value) == expected
+
+
 def test_panel_choices_offer_exactly_the_declared_values(addon_gui):
 	assert tuple(v for v, _ in addon_gui.ROLE_ANNOUNCEMENT_CHOICES) == addon_settings.ROLE_ANNOUNCEMENT_VALUES
 	assert tuple(v for v, _ in addon_gui.REVERB_CHOICES) == addon_settings.REVERB_PRESETS
@@ -325,7 +372,7 @@ def test_panel_choices_offer_exactly_the_declared_values(addon_gui):
 # --- the panel ------------------------------------------------------------
 
 
-def test_panel_builds_the_four_spec_controls_in_order(addon_gui):
+def test_panel_builds_the_five_spec_controls_in_order(addon_gui):
 	panel = _make_panel(addon_gui)
 	helper = panel._testHelper
 
@@ -335,14 +382,18 @@ def test_panel_builds_the_four_spec_controls_in_order(addon_gui):
 		("Sound &theme:", panel.themeChoice),
 		("&Role announcement:", panel.roleAnnouncementChoice),
 		("Re&verb:", panel.reverbChoice),
+		("Sound vol&ume:", panel.volumeSlider),
 	]
 	# Tab order is sizer order, and the spec puts the sound theme first.
 	assert helper.items == [
 		panel.themeChoice,
 		panel.roleAnnouncementChoice,
 		panel.reverbChoice,
+		panel.volumeSlider,
 		panel.silenceDuringSayAllCheckBox,
 	]
+	assert panel.volumeSlider.minValue == 0
+	assert panel.volumeSlider.maxValue == 100
 	# The check box carries its own label.
 	assert (
 		panel.silenceDuringSayAllCheckBox.label
@@ -356,6 +407,7 @@ def test_panel_shows_the_saved_settings(addon_gui):
 		"theme": "retro",
 		"roleAnnouncement": "speechOnly",
 		"reverb": "hall",
+		"volume": 35,
 		"silenceDuringSayAll": True,
 	}
 
@@ -366,6 +418,7 @@ def test_panel_shows_the_saved_settings(addon_gui):
 	assert panel.themeChoice.selection == 1
 	assert panel.roleAnnouncementChoice.selection == 2
 	assert panel.reverbChoice.selection == 3
+	assert panel.volumeSlider.GetValue() == 35
 	assert panel.silenceDuringSayAllCheckBox.IsChecked() is True
 
 
@@ -378,6 +431,7 @@ def test_panel_falls_back_to_spec_defaults_without_a_registered_config(addon_gui
 	assert panel.themeChoice.selection == 0
 	assert panel.roleAnnouncementChoice.selection == 0
 	assert panel.reverbChoice.selection == 1
+	assert panel.volumeSlider.GetValue() == 100
 	assert panel.silenceDuringSayAllCheckBox.IsChecked() is False
 
 
@@ -450,13 +504,23 @@ def test_choosing_a_reverb_preset_applies_it_live(addon_gui):
 	assert preview_recorder.calls == [("reverb", "hall")]
 
 
+def test_moving_the_volume_slider_writes_live_config(addon_gui):
+	preview_recorder = _RecordingPreview()
+	panel = _make_panel(addon_gui, preview=preview_recorder)
+
+	panel.volumeSlider.slide(35, addon_gui._test_wx.EVT_SLIDER)
+
+	assert addon_gui._test_conf["unspoken"]["volume"] == 35
+	assert preview_recorder.calls == []
+
+
 def test_role_announcement_is_not_applied_live(addon_gui):
 	panel = _make_panel(addon_gui)
 
 	assert addon_gui._test_wx.EVT_CHOICE not in panel.roleAnnouncementChoice.handlers
 
 
-def test_save_persists_all_four_settings_without_reapplying(addon_gui):
+def test_save_persists_all_five_settings_without_reapplying(addon_gui):
 	preview_recorder = _RecordingPreview()
 	panel = _make_panel(
 		addon_gui,
@@ -467,6 +531,7 @@ def test_save_persists_all_four_settings_without_reapplying(addon_gui):
 	panel.themeChoice.choose(1, addon_gui._test_wx.EVT_CHOICE)
 	panel.roleAnnouncementChoice.SetSelection(1)
 	panel.reverbChoice.choose(2, addon_gui._test_wx.EVT_CHOICE)
+	panel.volumeSlider.slide(35, addon_gui._test_wx.EVT_SLIDER)
 	panel.silenceDuringSayAllCheckBox.SetValue(True)
 	calls_before_save = list(preview_recorder.calls)
 	panel.onSave()
@@ -475,6 +540,7 @@ def test_save_persists_all_four_settings_without_reapplying(addon_gui):
 		"theme": "retro",
 		"roleAnnouncement": "soundsAndSpeech",
 		"reverb": "mediumRoom",
+		"volume": 35,
 		"silenceDuringSayAll": True,
 	}
 	assert preview_recorder.calls == calls_before_save == [
@@ -489,6 +555,7 @@ def test_cancel_reverts_to_the_state_the_panel_opened_with(addon_gui):
 		"theme": "default",
 		"roleAnnouncement": "sounds",
 		"reverb": "smallRoom",
+		"volume": 80,
 		"silenceDuringSayAll": False,
 	}
 	panel = _make_panel(
@@ -505,6 +572,7 @@ def test_cancel_reverts_to_the_state_the_panel_opened_with(addon_gui):
 	panel.themeChoice.choose(2, addon_gui._test_wx.EVT_CHOICE)
 	panel.reverbChoice.choose(0, addon_gui._test_wx.EVT_CHOICE)
 	panel.reverbChoice.choose(3, addon_gui._test_wx.EVT_CHOICE)
+	panel.volumeSlider.slide(25, addon_gui._test_wx.EVT_SLIDER)
 	panel.onDiscard()
 
 	# Not the previous selection: the one the panel opened with.
@@ -517,6 +585,7 @@ def test_cancel_reverts_to_the_state_the_panel_opened_with(addon_gui):
 		"theme": "default",
 		"roleAnnouncement": "sounds",
 		"reverb": "smallRoom",
+		"volume": 80,
 		"silenceDuringSayAll": False,
 	}
 
@@ -535,14 +604,17 @@ def test_cancel_after_apply_reverts_to_the_applied_state(addon_gui):
 
 	panel.themeChoice.choose(1, addon_gui._test_wx.EVT_CHOICE)
 	panel.reverbChoice.choose(3, addon_gui._test_wx.EVT_CHOICE)
+	panel.volumeSlider.slide(70, addon_gui._test_wx.EVT_SLIDER)
 	panel.onSave()  # what the Apply button does; the dialog stays open
 	panel.themeChoice.choose(2, addon_gui._test_wx.EVT_CHOICE)
 	panel.reverbChoice.choose(0, addon_gui._test_wx.EVT_CHOICE)
+	panel.volumeSlider.slide(20, addon_gui._test_wx.EVT_SLIDER)
 	panel.onDiscard()
 
 	assert preview_recorder.calls[-1] == ("revert", "retro", "hall")
 	assert addon_gui._test_conf["unspoken"]["theme"] == "retro"
 	assert addon_gui._test_conf["unspoken"]["reverb"] == "hall"
+	assert addon_gui._test_conf["unspoken"]["volume"] == 70
 
 
 def test_cancel_without_changes_asks_for_the_state_it_opened_with(addon_gui):
@@ -562,6 +634,7 @@ def test_cancel_stops_a_late_selection_event_from_reapplying(addon_gui):
 	evt_choice = addon_gui._test_wx.EVT_CHOICE
 	assert evt_choice not in panel.themeChoice.handlers
 	assert evt_choice not in panel.reverbChoice.handlers
+	assert addon_gui._test_wx.EVT_SLIDER not in panel.volumeSlider.handlers
 
 
 def test_the_recording_adapter_is_the_declared_interface():

@@ -54,9 +54,9 @@ will do — the inventory is what the steps below need, not the file:
 
 **1.2 Config spec.** Open the Unspoken-ng settings panel.
 
-- Pass: exactly four controls, in order — Sound theme, Role announcement,
-  Reverb, Silence role sounds during say all. Tab reaches each one and NVDA
-  announces its label.
+- Pass: exactly five controls, in order — Sound theme, Role announcement,
+  Reverb, Sound volume, Silence role sounds during say all. Tab reaches each
+  one and NVDA announces its label.
 - Fail: any leftover control from the pre-rebuild panel, an unlabelled control,
   or focus landing somewhere other than the category list when the dialog opens.
 
