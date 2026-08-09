@@ -24,7 +24,10 @@ XGETTEXT_COMMON_ARGS = (
 	"--msgid-bugs-address='$gettext_package_bugs_address' "
 	"--package-name='$gettext_package_name' "
 	"--package-version='$gettext_package_version' "
-	"-c -o $TARGET $SOURCES"
+	"--from-code=UTF-8 "
+	"--keyword=pgettext:1c,2 "
+	"--add-comments=Translators "
+	"-o $TARGET $SOURCES"
 )
 
 def generate(env):

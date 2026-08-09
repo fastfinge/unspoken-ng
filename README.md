@@ -93,6 +93,18 @@ python -m pytest tests/
 
 `pyproject.toml` groups the tooling so [uv](https://docs.astral.sh/uv/) can fetch it on demand: `uv run --group test pytest tests/`, `uv run --group build scons`.
 
+## Translating
+
+Every user-visible string is gettext-wrapped, so translations are ordinary gettext catalogs, contributed by pull request:
+
+1. Get the string catalog. Every release attaches `Unspoken-ng.pot`; or build it yourself with `scons pot` (requires [GNU gettext](https://mlocati.github.io/articles/gettext-iconv-windows.html) on your PATH, as does building the addon once translations exist).
+2. Create `addon/locale/<language>/LC_MESSAGES/nvda.po` from the catalog, where `<language>` is the language code NVDA uses (`de`, `fr`, `pt_BR`, ...). A PO editor such as [Poedit](https://poedit.net/) works well, as does `msginit`.
+3. Translate. The catalog includes the add-on's summary and description from `buildVars.py`; translating those two strings is what localizes the add-on's name and description in NVDA's Add-on Store and add-ons manager.
+4. Optionally, translate the user guide: place a translated copy of this readme at `addon/doc/<language>/readme.md`.
+5. Open a pull request with the `.po` file (and translated readme, if any). Don't commit compiled `.mo` files or generated `manifest.ini` files — the build produces those, and git ignores them.
+
+To update an existing translation after strings change, merge the new catalog into it (`msgmerge --update nvda.po Unspoken-ng.pot`, or Poedit's "Update from POT file") and fill in what's new.
+
 ## Releasing
 
 Publish a GitHub release whose tag is the bare version, no `v` prefix (e.g. `2.1`, matching the NVDA add-on store's `X.Y` convention) — that's the whole process. The addon version is stamped from `git describe --tags` at build time, so the tag *is* the version: CI rebuilds the addon from the tag — running the test suite and artifact verification first — and attaches the `.nvda-addon` to the release. Nothing is bumped, built, or uploaded by hand; local builds between tags get a version like `2.0-51-g3b71875`.
