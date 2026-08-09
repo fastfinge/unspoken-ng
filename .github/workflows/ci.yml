@@ -38,12 +38,25 @@ jobs:
         with:
           python-version: "3.13"
       - run: python -m pip install SCons==4.10.1 Markdown==3.10.2
+      # gettext supplies msgfmt (compiles any addon/locale po files into the
+      # bundle) and xgettext (generates the translators' pot catalog).
+      - uses: msys2/setup-msys2@v2
+        with:
+          install: gettext
+          update: true
+      - run: echo "C:\msys64\usr\bin" >> $env:GITHUB_PATH
       - run: scons
+      - run: scons pot
       - run: python .github/scripts/verify_artifact.py
       - uses: actions/upload-artifact@v7
         with:
           name: nvda-addon
           path: "*.nvda-addon"
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        with:
+          name: pot-file
+          path: "*.pot"
           if-no-files-found: error
 
   release:
@@ -57,6 +70,13 @@ jobs:
       - uses: actions/download-artifact@v7
         with:
           name: nvda-addon
+      # The pot rides along on releases so translators can work from a stable
+      # catalog without a build environment.
+      - uses: actions/download-artifact@v7
+        with:
+          name: pot-file
       - uses: softprops/action-gh-release@v2
         with:
-          files: "*.nvda-addon"
+          files: |
+            *.nvda-addon
+            *.pot

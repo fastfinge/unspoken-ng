@@ -128,7 +128,7 @@ def generateManifest(source, dest):
 		f.write(manifest)
 
 def generateTranslatedManifest(source, language, out):
-	_ = gettext.translation("nvda", localedir=os.path.join("addon", "locale"), languages=[language]).ugettext
+	_ = gettext.translation("nvda", localedir=os.path.join("addon", "locale"), languages=[language]).gettext
 	vars = {}
 	for var in ("addon_summary", "addon_description"):
 		vars[var] = _(buildVars.addon_info[var])
@@ -143,7 +143,7 @@ def expandGlobs(files):
 
 addon = env.NVDAAddon(addonFile, env.Dir('addon'))
 
-langDirs = [f for f in env.Glob(os.path.join("addon", "locale", "*"))]
+langDirs = [f for f in env.Glob(os.path.join("addon", "locale", "*")) if f.isdir()]
 
 #Allow all NVDA's gettext po files to be compiled in source/locale, and manifest files to be generated
 for dir in langDirs:
@@ -168,7 +168,7 @@ for mdFile in env.Glob(os.path.join('addon', 'doc', '*', '*.md')):
 # Pot target
 i18nFiles = expandGlobs(buildVars.i18nSources)
 gettextvars={
-		'gettext_package_bugs_address' : 'nvda-translations@freelists.org',
+		'gettext_package_bugs_address' : 'https://github.com/fastfinge/unspoken-ng/issues',
 		'gettext_package_name' : buildVars.addon_info['addon_name'],
 		'gettext_package_version' : buildVars.addon_info['addon_version']
 	}

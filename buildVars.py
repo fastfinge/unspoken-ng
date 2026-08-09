@@ -35,7 +35,7 @@ addon_info = {
 	# add-on Name, internal for nvda
 	"addon_name" : "Unspoken-ng",
 	# Add-on summary, usually the user visible name of the addon.
-	# TRANSLATORS: Summary for this add-on to be shown on installation and add-on information.
+	# Translators: Summary for this add-on to be shown on installation and add-on information.
 	"addon_summary" : _("Unspoken-ng 3D Audio"),
 	# Add-on description
 	# Translators: Long description to be shown for this add-on on add-on information from add-ons manager
@@ -58,12 +58,13 @@ import os.path
 # Define the python files that are the sources of your add-on.
 # You can use glob expressions here, they will be expanded.
 pythonSources = []
-#If you translate this, change this to not include wav files in the list of translated files.
 for dirpath, dirnames, filenames in os.walk(os.path.join("addon", "globalPlugins")):
 		pythonSources.extend([os.path.join(dirpath, fi) for fi in filenames if fi.endswith(".py") or fi.endswith(".wav")])
 
-# Files that contain strings for translation. Usually your python sources
-i18nSources = pythonSources + ["buildVars.py", "docHandler.py"]
+# Files that contain strings for translation: Python sources only.
+# pythonSources also carries the theme WAVs for bundle-rebuild tracking, and
+# xgettext must not be fed those.
+i18nSources = [f for f in pythonSources if f.endswith(".py")] + ["buildVars.py"]
 
 # Files that will be ignored when building the nvda-addon file
 # Paths are relative to the addon directory, not to the root directory of your addon sources.
