@@ -1,0 +1,100 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the Unspoken-ng package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Unspoken-ng 2.5\n"
+"Report-Msgid-Bugs-To: https://github.com/fastfinge/unspoken-ng/issues\n"
+"POT-Creation-Date: 2026-08-20 12:44+0000\n"
+"PO-Revision-Date: 2026-08-29 11:35+0200\n"
+"Last-Translator: DJ Graco\n"
+"Language-Team: \n"
+"Language: pl\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: Poedit 3.9\n"
+
+#. Translators: A role announcement mode: roles are announced by sounds instead of speech.
+#: addon\globalPlugins\Unspoken\addonGui.py:26
+msgid "Sounds"
+msgstr "Dźwięki"
+
+#. Translators: A role announcement mode: roles are announced by sounds and spoken as well.
+#: addon\globalPlugins\Unspoken\addonGui.py:28
+msgid "Sounds and speech"
+msgstr "Dźwięki i mowa"
+
+#. Translators: A role announcement mode: roles are spoken and no sounds play.
+#: addon\globalPlugins\Unspoken\addonGui.py:30
+msgid "Speech only"
+msgstr "Tylko mowa"
+
+#. Translators: A reverb preset: role sounds play with no reverb.
+#: addon\globalPlugins\Unspoken\addonGui.py:38
+msgid "None"
+msgstr "Brak"
+
+#. Translators: A reverb preset: role sounds play as if in a small room.
+#: addon\globalPlugins\Unspoken\addonGui.py:40
+msgid "Small room"
+msgstr "Mały pokój"
+
+#. Translators: A reverb preset: role sounds play as if in a medium-sized room.
+#: addon\globalPlugins\Unspoken\addonGui.py:42
+msgid "Medium room"
+msgstr "Średni pokój"
+
+#. Translators: A reverb preset: role sounds play as if in a hall.
+#: addon\globalPlugins\Unspoken\addonGui.py:44
+msgid "Hall"
+msgstr "Sala"
+
+#. Translators: The title of this add-on's category in NVDA's settings dialog.
+#: addon\globalPlugins\Unspoken\addonGui.py:135
+msgid "Unspoken-ng"
+msgstr "Unspoken-ng"
+
+#: addon\globalPlugins\Unspoken\addonGui.py:147
+msgid "Sound &theme:"
+msgstr "Motyw &dźwiękowy:"
+
+#: addon\globalPlugins\Unspoken\addonGui.py:158
+msgid "&Role announcement:"
+msgstr "&Ogłaszanie ról kontrolek:"
+
+#: addon\globalPlugins\Unspoken\addonGui.py:168
+msgid "Re&verb:"
+msgstr "Po&głos:"
+
+#: addon\globalPlugins\Unspoken\addonGui.py:179
+msgid "Sound vol&ume:"
+msgstr "Głośność dźw&ięków:"
+
+#. Translators: The label of a checkbox to stop role sounds playing during say all.
+#: addon\globalPlugins\Unspoken\addonGui.py:195
+msgid "&Silence role sounds during say all"
+msgstr "&Wycisz dźwięki ról podczas funkcji „Czytaj wszystko”"
+
+#. Translators: Spoken and brailled once at startup when the addon
+#. cannot play sounds, so NVDA speaks control roles instead.
+#: addon\globalPlugins\Unspoken\__init__.py:776
+msgid "Unspoken: audio unavailable, speaking roles instead."
+msgstr "Unspoken: dźwięk jest niedostępny, role kontrolek będą odczytywane mową."
+
+#. Translators: Summary for this add-on to be shown on installation and add-on information.
+#: buildVars.py:39
+msgid "Unspoken-ng 3D Audio"
+msgstr "Unspoken-ng 3D Audio"
+
+#. Translators: Long description to be shown for this add-on on add-on information from add-ons manager
+#: buildVars.py:42
+msgid ""
+"Adds 3D audio for controls and replaces control messages. This updated version "
+"uses OpenAL Soft and is only compatible with NVDA 2026.1 and later."
+msgstr ""
+"Dodaje dźwięk 3D dla kontrolek i zastępuje komunikaty o ich rolach dźwiękami. "
+"Ta zaktualizowana wersja korzysta z OpenAL Soft i wymaga NVDA 2026.1 lub "
+"nowszej wersji."
