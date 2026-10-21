@@ -947,8 +947,8 @@ def test_closing_the_player_closes_its_speech_streams(make_player):
     assert adapter.open_speech_stream(SPEECH_RATE) is None
 
 
-def test_speech_is_rendered_like_a_role_sound(stream):
-    """Listener-relative, no distance model, on the shared reverb bus."""
+def test_speech_is_placed_like_a_role_sound(stream):
+    """Listener-relative and at unity gain, on the role sounds' own HRTF."""
     al = stream._al
     relative = ctypes.c_int(-1)
     al.alGetSourcei(stream._source, player.AL_SOURCE_RELATIVE, ctypes.byref(relative))
@@ -985,3 +985,34 @@ def test_audio_fed_while_paused_is_held_not_thrown_away(stream):
     stream.pause(False)
     stream.sync()
     assert fired == ["held"]
+
+
+def test_speech_is_dry_whatever_the_reverb(make_player):
+    """Reverb is for the earcons; on speech it only smears the words.
+
+    OpenAL cannot report a source's auxiliary send back, so the test records
+    what the stream asks for while it is built.
+    """
+    adapter = make_player()
+    adapter.set_reverb("hall")
+    real = adapter._al
+    sends = []
+
+    class Recording:
+        def __getattr__(self, name):
+            return getattr(real, name)
+
+        def alSource3i(self, source, param, *values):
+            if param == player.AL_AUXILIARY_SEND_FILTER:
+                sends.append(values[0])
+            return real.alSource3i(source, param, *values)
+
+    adapter._al = Recording()
+    try:
+        opened = adapter.open_speech_stream(SPEECH_RATE)
+    finally:
+        adapter._al = real
+    opened._al = real
+    assert adapter._effect_slot.value, "the earcons' reverb bus exists"
+    assert sends == [0], "the speech source must be sent to no effect slot"
+    opened.close()

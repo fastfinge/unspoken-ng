@@ -13,7 +13,7 @@ utterance. There are three routes, one per `spatialSpeech` setting:
   volumes set from `spatial.pan_gains`. Still nvwave: ducking, leading-silence
   trimming and device handling are nvwave's own.
 - **hrtf** -- a `SpeechStream` from the Sound Player: the role sounds' device,
-  HRTF, reverb bus and clock. Falls back to panning when there is no such
+  HRTF and clock, played dry. Falls back to panning when there is no such
   stream (a degraded session) or the synth is not 16-bit.
 
 Interface facts a caller must know:
@@ -190,7 +190,7 @@ class _PannedRoute:
 
 
 class _SpatialRoute:
-    """The Sound Player's speech stream: HRTF, reverb and clock shared with the earcons.
+    """The Sound Player's speech stream: HRTF and clock shared with the earcons, no reverb.
 
     It bypasses nvwave's C++ player, so it does by hand the two things that
     player would have done for this utterance: assert the player's own audio

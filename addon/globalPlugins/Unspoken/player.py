@@ -18,8 +18,9 @@ plus one deliberate exception, for spatial speech (ADR 0008):
 It is the one method that returns something, because speech is a stream with a
 synth on the other end waiting for it: `SpeechStream` keeps nvwave's blocking
 `feed`/`sync` and per-chunk `onDone` contract, which no fire-and-forget command
-can. It shares the device, the HRTF and the reverb bus with the role sounds --
-that sharing is the whole reason it lives here.
+can. It shares the device, the HRTF and the clock with the role sounds -- that
+sharing is the whole reason it lives here -- but not the reverb bus: speech
+plays dry, whatever the Reverb setting.
 
 Interface facts a caller must know -- these *are* the interface:
 
@@ -1483,10 +1484,11 @@ class _Chunk:
 class OpenALSpeechStream:
     """One synth's speech as a streaming source in the Sound Player's context.
 
-    The source is placed and reverberated exactly like a role-sound voice --
-    listener-relative, no distance model, wired to the shared reverb bus -- so
-    speech and the earcon that preceded it are rendered by one HRTF, in one
-    room, on one clock. What differs is delivery: chunks are queued as they
+    The source is placed exactly like a role-sound voice -- listener-relative,
+    no distance model -- so speech and the earcon that preceded it are
+    rendered by one HRTF, on one clock. It is deliberately *dry*: no send to
+    the shared reverb bus. Reverb helps an earcon's position be heard, and it
+    smears speech, which has to be understood. What differs is delivery: chunks are queued as they
     arrive and recycled as they finish, and played chunks' `onDone` callbacks
     are run outside the lock by whichever thread recycled them -- the service
     thread while speech plays out, or a feeding thread, as nvwave's own `feed`
@@ -1541,9 +1543,9 @@ class OpenALSpeechStream:
         al.alSource3f(
             self._source, AL_POSITION, ctypes.c_float(0.0), ctypes.c_float(0.0), ctypes.c_float(-1.0)
         )
-        al.alSource3i(
-            self._source, AL_AUXILIARY_SEND_FILTER, owner._effect_slot.value, 0, AL_FILTER_NULL
-        )
+        # Dry, stated rather than left to the default: whatever the Reverb
+        # setting, speech never reaches the bus.
+        al.alSource3i(self._source, AL_AUXILIARY_SEND_FILTER, 0, 0, AL_FILTER_NULL)
         self._thread = threading.Thread(
             target=self._run, name="unspoken-speech-stream", daemon=True
         )

@@ -255,8 +255,9 @@ and a control at the far right will do — and tab between them.
 **3.7 Spatial speech, HRTF.** Set Spatial speech to Panning and HRTF and repeat
 3.6, then start say all (`NVDA+Down Arrow`) on a long web page.
 
-- Pass: speech sits with the role sounds, including above or below; it carries
-  the selected Reverb. Say all reads continuously, keeps its place (the caret
+- Pass: speech sits with the role sounds, including above or below, and is dry
+  on every Reverb preset — switch to Hall and the earcons ring, speech does
+  not. Say all reads continuously, keeps its place (the caret
   follows), and stops promptly on `Control`. Pause (`Shift`) and resume work.
   With eSpeak, OneCore and SAPI 5 in turn, no slower to start speaking than
   with None.

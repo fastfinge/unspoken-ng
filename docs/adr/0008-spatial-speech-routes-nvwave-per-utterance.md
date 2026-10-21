@@ -3,7 +3,7 @@
 A **Spatial speech** setting places the synthesizer's speech where the role sound came from, so the
 earcon and the words about the control arrive from one place. It has three values: `none` (the
 default; speech exactly as without the addon), `panning` (left/right, still on nvwave) and `hrtf`
-("Panning and HRTF": the role sounds' own OpenAL device, HRTF, reverb bus and clock).
+("Panning and HRTF": the role sounds' own OpenAL device, HRTF and clock, played dry).
 
 It is built as a **speech router** (`speechrouter.py`) that patches five methods of
 `nvwave.WavePlayer` — `feed`, `stop`, `sync`, `idle`, `pause` — and gives every mono speech player a
@@ -43,10 +43,15 @@ stop. Per-utterance routing makes "an utterance finishes where it started" true 
 and the setting can still be written through live from the panel (as volume is, ADR 0007): the
 newly selected choice's own announcement is the first speech placed by it.
 
-**HRTF speech through a separate OpenAL context or device.** Rejected: a second context has its own
-listener and its own effect slots, so speech would not share the earcons' reverb bus, and a second
-device would not share their clock. Speech therefore lives in the Sound Player's context, as a
-dedicated streaming source outside the voice pool.
+**HRTF speech through a separate OpenAL context or device.** Rejected: a second device would not
+share the earcons' clock, and a second context buys nothing a dedicated source does not. Speech
+therefore lives in the Sound Player's context, as a streaming source outside the voice pool.
+
+**Speech through the shared reverb bus**, so it sits "in the same room" as the earcons. The first
+cut did this, and it was rejected before release: reverb is there to make an earcon's position
+easier to hear, and on speech it only smears the words the user has to understand. The speech
+source's auxiliary send is set explicitly to no slot, so it is dry on every Reverb preset, and
+Reverb stays a role-sound setting.
 
 **Fire index callbacks from `AL_SOFT_events`.** Considered and not taken: it moves `onDone` delivery
 onto an OpenAL C thread whose trampoline must be registered, kept alive and unregistered exactly as

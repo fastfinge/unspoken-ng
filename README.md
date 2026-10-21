@@ -45,7 +45,7 @@ Once installed, the addon adds an **Unspoken-ng** category under NVDA menu → P
 * **Spatial speech** — whether your synthesizer's speech comes from where the role sound did, so the sound and the words about the control land in the same place:
   * *None* (the default) — speech plays exactly as it would without the addon
   * *Panning* — speech is panned left or right to where you arrived: the focused control, the object you navigated to, or the field quick navigation landed on. It still plays through NVDA's own audio output.
-  * *Panning and HRTF* — speech is placed in 3D, up and down as well as left and right, by the same engine and in the same room (**Reverb**) as the role sounds. Use headphones. If the addon is running without sound, this falls back to *Panning*.
+  * *Panning and HRTF* — speech is placed in 3D, up and down as well as left and right, by the same engine as the role sounds. Speech is always dry: **Reverb** applies to the role sounds only. Use headphones. If the addon is running without sound, this falls back to *Panning*.
 
   Speech moves only between utterances, never mid-sentence, and stays where you last arrived while say all reads on. Changes apply from the next thing NVDA says. It works with synthesizers that run inside NVDA, which covers eSpeak, Windows OneCore, SAPI 5 and most add-on synthesizers. SAPI 4 and 32-bit SAPI 5 voices, which NVDA runs in a separate process, are not placed.
 * **Silence role sounds during say all** — off by default. Turn it on if you find the sounds distracting while reading continuously.
