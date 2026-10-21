@@ -47,15 +47,15 @@ will do — the inventory is what the steps below need, not the file:
 **1.1 Clean start.** Start NVDA with the addon installed.
 
 - Pass: no error dialog, no spoken message from the addon. The log contains one
-  `Unspoken-ng ready:` line reporting 14 slots, the configured theme and reverb
-  preset, and `degraded=False`.
+  `Unspoken-ng ready:` line reporting 14 slots, the configured theme, reverb
+  preset and spatial speech mode, and `degraded=False`.
 - Fail: any dialog, any startup speech from the addon, `degraded=True`, or a
   traceback mentioning `Unspoken`.
 
 **1.2 Config spec.** Open the Unspoken-ng settings panel.
 
-- Pass: exactly five controls, in order — Sound theme, Role announcement,
-  Reverb, Sound volume, Silence role sounds during say all. Tab reaches each
+- Pass: exactly six controls, in order — Sound theme, Role announcement,
+  Reverb, Sound volume, Spatial speech, Silence role sounds during say all. Tab reaches each
   one and NVDA announces its label.
 - Fail: any leftover control from the pre-rebuild panel, an unlabelled control,
   or focus landing somewhere other than the category list when the dialog opens.
@@ -239,6 +239,37 @@ bundled default into it, renamed `link.wav` and `button.wav`. Reopen the panel.
 - Fail: the folder not appearing; an error dialog; silence on the unprovided
   slots.
 
+**3.6 Spatial speech, panning.** With headphones on, set Spatial speech to
+Panning (no need to press OK: it applies from the next utterance). Move to a
+window with controls at both screen edges — a maximised browser's address bar
+and a control at the far right will do — and tab between them.
+
+- Pass: each control's name comes from the same side as its role sound, and
+  speech straight after a centred control is as loud as with Spatial speech
+  None. Quick-nav by heading (`H`) in browse mode moves the speech to the
+  heading even though headings have no sound. No word is cut or doubled when
+  switching.
+- Fail: speech stuck in the centre; speech moving in the middle of a sentence;
+  a gap or a click at the start of each utterance.
+
+**3.7 Spatial speech, HRTF.** Set Spatial speech to Panning and HRTF and repeat
+3.6, then start say all (`NVDA+Down Arrow`) on a long web page.
+
+- Pass: speech sits with the role sounds, including above or below, and is dry
+  on every Reverb preset — switch to Hall and the earcons ring, speech does
+  not. Say all reads continuously, keeps its place (the caret
+  follows), and stops promptly on `Control`. Pause (`Shift`) and resume work.
+  With eSpeak, OneCore and SAPI 5 in turn, no slower to start speaking than
+  with None.
+- Fail: say all stalling between lines (index callbacks not firing); speech
+  running on after `Control`; a stutter under fast arrowing.
+
+**3.8 Spatial speech survives a device change.** With Panning and HRTF on,
+change NVDA's output device mid-say-all, and separately unplug the headphones.
+
+- Pass: speech resumes on the new device; say all does not hang if the device
+  is gone.
+
 ---
 
 ## 4. Devices
@@ -357,7 +388,9 @@ Press `NVDA+Control+F3` (reload plugins) a few times, then navigate.
 
 - Pass: sounds still play, exactly once each; no growing pile of duplicate
   sounds per keypress; no traceback in the log. This is what proves the two
-  speech-path patches are being handed back rather than stacked.
+  speech-path patches are being handed back rather than stacked. Repeat with
+  Spatial speech on Panning and HRTF: speech keeps working through every
+  reload, which proves the five `WavePlayer` patches are handed back too.
 - Fail: two or more sounds per keypress after a reload, or NVDA's role
   suppression persisting after the addon is uninstalled.
 

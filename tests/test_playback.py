@@ -428,3 +428,49 @@ def test_an_outcome_missing_a_key_degrades():
 def test_a_device_opens_but_a_broken_theme_still_degrades():
     """Silence with suppression standing is the failure, not the fallback."""
     assert playback.can_produce_role_sound(_outcome(slots_loaded=0)) is False
+
+
+# --------------------------------------------------------------------------
+# is_arrival: where spatial speech comes from (ADR 0008)
+# --------------------------------------------------------------------------
+
+
+def _field(reason, field_type, slot=None):
+    return playback.ControlField(
+        reason=reason, field_type=field_type, slot=slot, synth_reports_indexes=True
+    )
+
+
+def test_every_object_event_is_an_arrival_with_or_without_a_sound():
+    assert playback.is_arrival(playback.ObjectEvent(slot="button"))
+    assert playback.is_arrival(playback.ObjectEvent(slot=None))
+
+
+@pytest.mark.parametrize("reason", ["CARET", "QUICKNAV"])
+def test_a_field_navigation_landed_inside_is_an_arrival_even_without_a_slot(reason):
+    """Quick-nav to a heading has no role sound and must still place the heading's speech."""
+    assert playback.is_arrival(_field(reason, playback.FIELD_ENTERED, slot=None))
+
+
+@pytest.mark.parametrize(
+    ("reason", "field_type"),
+    [
+        ("SAYALL", playback.FIELD_ENTERED),  # behind the read-ahead queue
+        ("QUICKNAV", "start_relative"),  # traversed mid-utterance
+        ("CARET", "start_inControlFieldStack"),  # already inside
+        ("FOCUS", playback.FIELD_ENTERED),  # the focus event already placed it
+        (None, playback.FIELD_ENTERED),
+    ],
+)
+def test_everything_else_on_the_reading_path_is_not(reason, field_type):
+    assert not playback.is_arrival(_field(reason, field_type, slot="link"))
+
+
+def test_every_arrival_on_the_reading_path_is_a_leading_play_when_it_plays():
+    """Speech is placed where a leading sound would be: the two never disagree."""
+    config = playback.Config(role_announcement="sounds", silence_during_say_all=False)
+    for reason in ("CARET", "QUICKNAV", "SAYALL", "FOCUS"):
+        for field_type in (playback.FIELD_ENTERED, "start_relative"):
+            event = _field(reason, field_type, slot="link")
+            if playback.is_arrival(event):
+                assert playback.decide(event, config) is playback.LEAD

@@ -367,12 +367,29 @@ def test_volume_slider_position(addon_gui, value, expected):
 def test_panel_choices_offer_exactly_the_declared_values(addon_gui):
 	assert tuple(v for v, _ in addon_gui.ROLE_ANNOUNCEMENT_CHOICES) == addon_settings.ROLE_ANNOUNCEMENT_VALUES
 	assert tuple(v for v, _ in addon_gui.REVERB_CHOICES) == addon_settings.REVERB_PRESETS
+	assert tuple(v for v, _ in addon_gui.SPATIAL_SPEECH_CHOICES) == addon_settings.SPATIAL_SPEECH_MODES
+
+
+@pytest.mark.parametrize(
+	("value", "expected_index"),
+	[("none", 0), ("panning", 1), ("hrtf", 2), ("surround", 0), (None, 0)],
+)
+def test_spatial_speech_index_for(addon_gui, value, expected_index):
+	assert addon_gui.spatial_speech_index_for(value) == expected_index
+
+
+@pytest.mark.parametrize(
+	("index", "expected_value"),
+	[(0, "none"), (1, "panning"), (2, "hrtf"), (-1, "none"), (3, "none")],
+)
+def test_spatial_speech_value_for_index(addon_gui, index, expected_value):
+	assert addon_gui.spatial_speech_value_for_index(index) == expected_value
 
 
 # --- the panel ------------------------------------------------------------
 
 
-def test_panel_builds_the_five_spec_controls_in_order(addon_gui):
+def test_panel_builds_the_six_spec_controls_in_order(addon_gui):
 	panel = _make_panel(addon_gui)
 	helper = panel._testHelper
 
@@ -383,6 +400,7 @@ def test_panel_builds_the_five_spec_controls_in_order(addon_gui):
 		("&Role announcement:", panel.roleAnnouncementChoice),
 		("Re&verb:", panel.reverbChoice),
 		("Sound vol&ume:", panel.volumeSlider),
+		("S&patial speech:", panel.spatialSpeechChoice),
 	]
 	# Tab order is sizer order, and the spec puts the sound theme first.
 	assert helper.items == [
@@ -390,6 +408,7 @@ def test_panel_builds_the_five_spec_controls_in_order(addon_gui):
 		panel.roleAnnouncementChoice,
 		panel.reverbChoice,
 		panel.volumeSlider,
+		panel.spatialSpeechChoice,
 		panel.silenceDuringSayAllCheckBox,
 	]
 	assert panel.volumeSlider.minValue == 0
@@ -408,6 +427,7 @@ def test_panel_shows_the_saved_settings(addon_gui):
 		"roleAnnouncement": "speechOnly",
 		"reverb": "hall",
 		"volume": 35,
+		"spatialSpeech": "hrtf",
 		"silenceDuringSayAll": True,
 	}
 
@@ -419,6 +439,7 @@ def test_panel_shows_the_saved_settings(addon_gui):
 	assert panel.roleAnnouncementChoice.selection == 2
 	assert panel.reverbChoice.selection == 3
 	assert panel.volumeSlider.GetValue() == 35
+	assert panel.spatialSpeechChoice.selection == 2
 	assert panel.silenceDuringSayAllCheckBox.IsChecked() is True
 
 
@@ -432,6 +453,7 @@ def test_panel_falls_back_to_spec_defaults_without_a_registered_config(addon_gui
 	assert panel.roleAnnouncementChoice.selection == 0
 	assert panel.reverbChoice.selection == 1
 	assert panel.volumeSlider.GetValue() == 100
+	assert panel.spatialSpeechChoice.selection == 0
 	assert panel.silenceDuringSayAllCheckBox.IsChecked() is False
 
 
@@ -514,13 +536,24 @@ def test_moving_the_volume_slider_writes_live_config(addon_gui):
 	assert preview_recorder.calls == []
 
 
+def test_choosing_spatial_speech_writes_live_config(addon_gui):
+	preview_recorder = _RecordingPreview()
+	panel = _make_panel(addon_gui, preview=preview_recorder)
+
+	panel.spatialSpeechChoice.choose(2, addon_gui._test_wx.EVT_CHOICE)
+
+	# Pulled at the next utterance, like volume at the next sound: no preview hop.
+	assert addon_gui._test_conf["unspoken"]["spatialSpeech"] == "hrtf"
+	assert preview_recorder.calls == []
+
+
 def test_role_announcement_is_not_applied_live(addon_gui):
 	panel = _make_panel(addon_gui)
 
 	assert addon_gui._test_wx.EVT_CHOICE not in panel.roleAnnouncementChoice.handlers
 
 
-def test_save_persists_all_five_settings_without_reapplying(addon_gui):
+def test_save_persists_all_six_settings_without_reapplying(addon_gui):
 	preview_recorder = _RecordingPreview()
 	panel = _make_panel(
 		addon_gui,
@@ -532,6 +565,7 @@ def test_save_persists_all_five_settings_without_reapplying(addon_gui):
 	panel.roleAnnouncementChoice.SetSelection(1)
 	panel.reverbChoice.choose(2, addon_gui._test_wx.EVT_CHOICE)
 	panel.volumeSlider.slide(35, addon_gui._test_wx.EVT_SLIDER)
+	panel.spatialSpeechChoice.choose(1, addon_gui._test_wx.EVT_CHOICE)
 	panel.silenceDuringSayAllCheckBox.SetValue(True)
 	calls_before_save = list(preview_recorder.calls)
 	panel.onSave()
@@ -541,6 +575,7 @@ def test_save_persists_all_five_settings_without_reapplying(addon_gui):
 		"roleAnnouncement": "soundsAndSpeech",
 		"reverb": "mediumRoom",
 		"volume": 35,
+		"spatialSpeech": "panning",
 		"silenceDuringSayAll": True,
 	}
 	assert preview_recorder.calls == calls_before_save == [
@@ -556,6 +591,7 @@ def test_cancel_reverts_to_the_state_the_panel_opened_with(addon_gui):
 		"roleAnnouncement": "sounds",
 		"reverb": "smallRoom",
 		"volume": 80,
+		"spatialSpeech": "none",
 		"silenceDuringSayAll": False,
 	}
 	panel = _make_panel(
@@ -573,6 +609,7 @@ def test_cancel_reverts_to_the_state_the_panel_opened_with(addon_gui):
 	panel.reverbChoice.choose(0, addon_gui._test_wx.EVT_CHOICE)
 	panel.reverbChoice.choose(3, addon_gui._test_wx.EVT_CHOICE)
 	panel.volumeSlider.slide(25, addon_gui._test_wx.EVT_SLIDER)
+	panel.spatialSpeechChoice.choose(2, addon_gui._test_wx.EVT_CHOICE)
 	panel.onDiscard()
 
 	# Not the previous selection: the one the panel opened with.
@@ -586,6 +623,7 @@ def test_cancel_reverts_to_the_state_the_panel_opened_with(addon_gui):
 		"roleAnnouncement": "sounds",
 		"reverb": "smallRoom",
 		"volume": 80,
+		"spatialSpeech": "none",
 		"silenceDuringSayAll": False,
 	}
 
@@ -635,6 +673,7 @@ def test_cancel_stops_a_late_selection_event_from_reapplying(addon_gui):
 	assert evt_choice not in panel.themeChoice.handlers
 	assert evt_choice not in panel.reverbChoice.handlers
 	assert addon_gui._test_wx.EVT_SLIDER not in panel.volumeSlider.handlers
+	assert evt_choice not in panel.spatialSpeechChoice.handlers
 
 
 def test_the_recording_adapter_is_the_declared_interface():

@@ -18,6 +18,8 @@ The interface is one decide call with one predicate beside it:
 - `should_suppress_spoken_role(slot, config, degraded=...)` answers the
   speech hook's one question: does the addon swallow NVDA's spoken role
   because a sound stands in for it?
+- `is_arrival(event)` answers spatial speech's one question: is this where
+  the user just arrived, and so where the next utterance should come from?
 
 `GlobalPlugin`'s call sites gather inputs and obey; nothing there compares a
 setting or re-implements a clause, and there is no order for a caller to get
@@ -201,6 +203,31 @@ def decide(event: ObjectEvent | ControlField, config: Config) -> Verdict:
     if rides and event.synth_reports_indexes:
         return RIDE
     return LEAD
+
+
+#: The reasons whose entered field is where the user just *arrived*: both
+#: cancel current speech, so the utterance announcing the field starts now.
+ARRIVAL_REASONS = frozenset({"CARET", "QUICKNAV"})
+
+
+def is_arrival(event: ObjectEvent | ControlField) -> bool:
+    """Is this where the user just arrived -- the place speech now comes from?
+
+    Spatial speech (ADR 0008) places each utterance where the last arrival
+    was, so speech and the role sound that led it come from one place. An
+    arrival is the moment ADR 0002 lets a sound lead: an object event, or the
+    field a caret move or quick-nav landed inside. Say-all is not one -- its
+    utterances sit behind the read-ahead queue -- and nor is a field speech
+    merely traverses.
+
+    Neither the slot nor the role-announcement setting is an input. Speech is
+    placed whether or not a sound plays: quick-nav to a heading has no role
+    sound, and its speech must still come from the heading, not from wherever
+    the last control was.
+    """
+    if isinstance(event, ObjectEvent):
+        return True
+    return event.field_type == FIELD_ENTERED and event.reason in ARRIVAL_REASONS
 
 
 def should_suppress_spoken_role(

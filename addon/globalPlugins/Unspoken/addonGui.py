@@ -1,4 +1,4 @@
-"""The Unspoken-ng settings panel: five controls, sound theme first (spec §8)."""
+"""The Unspoken-ng settings panel: six controls, sound theme first (spec §8)."""
 
 import addonHandler
 import config
@@ -42,6 +42,18 @@ REVERB_CHOICES = _labelled(
 		"mediumRoom": _("Medium room"),
 		# Translators: A reverb preset: role sounds play as if in a hall.
 		"hall": _("Hall"),
+	},
+)
+
+SPATIAL_SPEECH_CHOICES = _labelled(
+	settings.SPATIAL_SPEECH_MODES,
+	{
+		# Translators: A spatial speech mode: speech plays as it would without the add-on.
+		"none": _("None"),
+		# Translators: A spatial speech mode: speech is panned left or right to where the role sound came from.
+		"panning": _("Panning"),
+		# Translators: A spatial speech mode: speech is placed in 3D (head-related transfer function) where the role sound came from.
+		"hrtf": _("Panning and HRTF"),
 	},
 )
 
@@ -111,6 +123,21 @@ def reverb_value_for_index(index):
 	return settings.DEFAULTS["reverb"]
 
 
+def spatial_speech_index_for(selected_value):
+	values = settings.SPATIAL_SPEECH_MODES
+	try:
+		return values.index(selected_value)
+	except ValueError:
+		return values.index(settings.DEFAULTS["spatialSpeech"])
+
+
+def spatial_speech_value_for_index(index):
+	values = settings.SPATIAL_SPEECH_MODES
+	if 0 <= index < len(values):
+		return values[index]
+	return settings.DEFAULTS["spatialSpeech"]
+
+
 def volume_slider_position(value):
 	"""Clamp a stored volume percentage to the slider's 0-100 range.
 
@@ -140,6 +167,7 @@ class SettingsPanel(gui.settingsDialogs.SettingsPanel):
 		theme_labels, self._themeIds = build_theme_choices(self._themes.discover())
 		role_labels = [label for value, label in ROLE_ANNOUNCEMENT_CHOICES]
 		reverb_labels = [label for value, label in REVERB_CHOICES]
+		spatial_speech_labels = [label for value, label in SPATIAL_SPEECH_CHOICES]
 
 		sHelper = gui.guiHelper.BoxSizerHelper(self, sizer=settingsSizer)
 		# Translators: The label of a combo box to choose the active sound theme.
@@ -186,6 +214,17 @@ class SettingsPanel(gui.settingsDialogs.SettingsPanel):
 		)
 		self.volumeSlider.Bind(wx.EVT_SLIDER, self.onVolumeChanged)
 
+		# Translators: The label of a combo box to choose whether speech is placed where role sounds are.
+		self.spatialSpeechChoice = sHelper.addLabeledControl(
+			_("S&patial speech:"),
+			wx.Choice,
+			choices=spatial_speech_labels,
+		)
+		self.spatialSpeechChoice.SetSelection(
+			spatial_speech_index_for(self._priorSettings.get("spatialSpeech"))
+		)
+		self.spatialSpeechChoice.Bind(wx.EVT_CHOICE, self.onSpatialSpeechChanged)
+
 		# This silences role sounds only; whether roles are spoken during say all
 		# stays governed by Role announcement (spec §8, deliberate per #10/#15).
 		self.silenceDuringSayAllCheckBox = sHelper.addItem(
@@ -220,6 +259,16 @@ class SettingsPanel(gui.settingsDialogs.SettingsPanel):
 		except KeyError:
 			pass
 
+	# Spatial speech is pulled from config at the start of every utterance, so
+	# writing it through is the whole live preview, exactly as for volume: the
+	# announcement of the newly selected choice is the first speech placed by
+	# it. `onDiscard` puts the saved value back.
+	def onSpatialSpeechChanged(self, event):
+		try:
+			config.conf["unspoken"]["spatialSpeech"] = self._selectedSpatialSpeech()
+		except KeyError:
+			pass
+
 	def onSave(self):
 		section = config.conf["unspoken"]
 		section["theme"] = self._selectedThemeId()
@@ -228,6 +277,7 @@ class SettingsPanel(gui.settingsDialogs.SettingsPanel):
 		)
 		section["reverb"] = self._selectedReverbPreset()
 		section["volume"] = self.volumeSlider.GetValue()
+		section["spatialSpeech"] = self._selectedSpatialSpeech()
 		section["silenceDuringSayAll"] = self.silenceDuringSayAllCheckBox.IsChecked()
 		# The theme and reverb preset are already live; saving must not re-apply
 		# them. Saving is also what Apply does, and the dialog stays open
@@ -244,6 +294,7 @@ class SettingsPanel(gui.settingsDialogs.SettingsPanel):
 		self.themeChoice.Unbind(wx.EVT_CHOICE)
 		self.reverbChoice.Unbind(wx.EVT_CHOICE)
 		self.volumeSlider.Unbind(wx.EVT_SLIDER)
+		self.spatialSpeechChoice.Unbind(wx.EVT_CHOICE)
 
 		section = config.conf["unspoken"]
 		for key, value in self._priorSettings.items():
@@ -255,7 +306,7 @@ class SettingsPanel(gui.settingsDialogs.SettingsPanel):
 		self._preview.revert(self._priorThemeId, self._priorReverbPreset)
 
 	def _readSettings(self):
-		"""Snapshot the five settings, tolerating a config spec not yet registered.
+		"""Snapshot the six settings, tolerating a config spec not yet registered.
 
 		Keys that are missing are simply absent from the snapshot; the choice
 		helpers then fall back to the spec §8 defaults, so the panel still
@@ -279,6 +330,9 @@ class SettingsPanel(gui.settingsDialogs.SettingsPanel):
 
 	def _selectedReverbPreset(self):
 		return reverb_value_for_index(self.reverbChoice.GetSelection())
+
+	def _selectedSpatialSpeech(self):
+		return spatial_speech_value_for_index(self.spatialSpeechChoice.GetSelection())
 
 
 def register(*, themes, preview):

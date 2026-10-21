@@ -45,3 +45,20 @@ def position_for(
     y = math.sin(rad_y)
     z = -math.cos(rad_x) * math.cos(rad_y)
     return (x, y, z)
+
+
+def pan_gains(position: tuple[float, float, float]) -> tuple[float, float]:
+    """Left and right channel gains placing mono speech where `position` is.
+
+    Panning only has left and right, so it reads the position's x -- the same
+    vector the role sound was placed with, which is what keeps the two
+    aligned. The law is equal-power, scaled so the centre is unity in both
+    channels: speech straight ahead is exactly as loud as it is without
+    panning, and the far channel falls away smoothly to silence at the edge
+    rather than the near one ever exceeding full scale.
+    """
+    x = max(-1.0, min(1.0, float(position[0])))
+    angle = (x + 1.0) * math.pi / 4.0
+    left = min(1.0, math.sqrt(2.0) * math.cos(angle))
+    right = min(1.0, math.sqrt(2.0) * math.sin(angle))
+    return (max(0.0, left), max(0.0, right))

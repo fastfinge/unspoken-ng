@@ -11,6 +11,17 @@ The seam (spec §4.4) is four fire-and-forget methods:
     set_reverb(preset)      switch the shared reverb bus to a named preset
     close()                 stop everything and give the device back
 
+plus one deliberate exception, for spatial speech (ADR 0008):
+
+    open_speech_stream(rate)  a synth's speech as a streaming source, or None
+
+It is the one method that returns something, because speech is a stream with a
+synth on the other end waiting for it: `SpeechStream` keeps nvwave's blocking
+`feed`/`sync` and per-chunk `onDone` contract, which no fire-and-forget command
+can. It shares the device, the HRTF and the clock with the role sounds -- that
+sharing is the whole reason it lives here -- but not the reverb bus: speech
+plays dry, whatever the Reverb setting.
+
 Interface facts a caller must know -- these *are* the interface:
 
 - No method returns a value, invokes a callback, or raises. `play` is safe on
@@ -45,6 +56,12 @@ Threading model (three threads touch this module):
   wrapped so nothing can propagate out of it. An exception on that thread kills
   NVDA.
 
+A speech stream adds two more: the synth's own threads, which call `feed` and
+may block in it exactly as they would in nvwave, and one service thread per
+stream, which recycles played buffers and fires their `onDone` callbacks. Each
+stream's state sits behind its own `Condition`; nothing on the role-sound play
+path ever takes it.
+
 OpenAL Soft's API is thread-safe, so the main thread and the worker can both
 call into it. Voice ownership is partitioned instead of locked: the main thread
 owns the active list, the worker owns voices it is retiring, and the two hand
@@ -61,6 +78,7 @@ import os
 import tempfile
 import threading
 import time
+import weakref
 from collections import deque
 from typing import NamedTuple, Protocol, runtime_checkable
 
@@ -117,6 +135,55 @@ class SoundPlayer(Protocol):
 
     def close(self) -> None: ...
 
+    def open_speech_stream(self, samples_per_sec: int) -> SpeechStream | None:
+        """A streaming source for one synth's mono 16-bit speech, or None.
+
+        None means "this player cannot carry speech" -- the silent adapter, a
+        closed player, or a source OpenAL would not give us -- and the caller
+        keeps speech on nvwave. A stream lives until `close`, or until the
+        player that opened it closes, whichever is first.
+        """
+        ...
+
+
+@runtime_checkable
+class SpeechStream(Protocol):
+    """nvwave.WavePlayer's playback contract, on the Sound Player's device.
+
+    The methods and their blocking behaviour are nvwave's, because the synth
+    on the other side was written against nvwave:
+
+    - `feed(data, on_done)` queues mono 16-bit PCM and blocks while ~400 ms is
+      already queued (NVDA's own WASAPI buffer). `on_done` fires on the
+      stream's service thread once everything fed up to and including this
+      chunk has played; empty `data` with an `on_done` is a marker, which is
+      how SAPI 5 places its bookmarks.
+    - `stop()` cuts playback, drops every pending `on_done`, and releases a
+      blocked `feed` without queueing its audio.
+    - `sync()` blocks until everything fed has played and its callbacks have
+      run.
+    - `pause(switch)` pauses or resumes.
+    - `set_position(position)` places the stream, in the role sounds'
+      convention (+x right, +y up, -z forward, distance 1).
+    - `close()` is `stop()` plus giving the source back. Idempotent.
+
+    None of them raise. When the device is gone, audio is dropped and its
+    callbacks fire at once, so the speech manager is never left waiting for an
+    index nobody can hear.
+    """
+
+    def feed(self, data: bytes, on_done=None) -> None: ...
+
+    def stop(self) -> None: ...
+
+    def sync(self) -> None: ...
+
+    def pause(self, switch: bool) -> None: ...
+
+    def set_position(self, position: tuple[float, float, float]) -> None: ...
+
+    def close(self) -> None: ...
+
 
 class SettingsProvider(Protocol):
     """What the player is allowed to know about NVDA's settings.
@@ -128,7 +195,9 @@ class SettingsProvider(Protocol):
       OpenAL. `"default"` (or `None`/`""`) means the OS default device.
     - `volume`: the *effective* gain, 0.0-1.0, already folded down from
       `audio.soundVolume` / `audio.soundVolumeFollowsVoice`. The player only
-      ever sees a float.
+      ever sees a float. It is a role-sound gain, applied per voice: speech
+      sharing the device has its volume from the synth and must not be
+      scaled by it.
 
     Both are read on NVDA's main thread inside `play`, so an implementation
     must be cheap (two dict lookups) and must not block.
@@ -166,6 +235,10 @@ class SilentSoundPlayer:
 
     def close(self) -> None:
         pass
+
+    def open_speech_stream(self, samples_per_sec: int) -> None:
+        """Speech stays on nvwave in a degraded session."""
+        return None
 
 
 # --------------------------------------------------------------------------
@@ -218,6 +291,9 @@ AL_REFERENCE_DISTANCE = 0x1020
 AL_ROLLOFF_FACTOR = 0x1021
 AL_SOURCE_STATE = 0x1010
 AL_PLAYING = 0x1012
+AL_PAUSED = 0x1013
+AL_BUFFERS_QUEUED = 0x1015
+AL_BUFFERS_PROCESSED = 0x1016
 
 # EFX
 AL_EFFECT_TYPE = 0x8001
@@ -267,6 +343,22 @@ RAMP_STEP_SECONDS = 0.008
 #: mixer renders the silence instead of cutting in the same update as the last
 #: gain write. Three 8 ms ticks (~24 ms) clear two ~10 ms periods.
 RAMP_ZERO_HOLD_TICKS = 3
+
+#: How much speech a stream holds before `feed` blocks: NVDA's own WASAPI
+#: buffer (`BUFFER_MS = 400` in nvdaHelper's wasapi.cpp), so a synth sees the
+#: same backpressure it was written against.
+SPEECH_QUEUE_SECONDS = 0.4
+
+#: How often a speaking stream's service thread recycles played buffers and
+#: fires their callbacks. Half a WASAPI period: index callbacks land within
+#: ~5 ms of the audio, well inside a synth's own index granularity. The thread
+#: sleeps on its `Condition` whenever nothing is queued, so a quiet stream
+#: costs nothing.
+SPEECH_SERVICE_SECONDS = 0.005
+
+#: How long `feed` and `sync` wait between rechecks while blocked. Only a
+#: guard: the service thread and `stop` notify, so a wait normally ends early.
+SPEECH_WAIT_SECONDS = 0.05
 
 #: Values of NVDA's `[audio] outputDevice` that mean "the OS default device",
 #: which OpenAL spells as a NULL device name.
@@ -439,6 +531,12 @@ def _bind(dll: ctypes.CDLL) -> ctypes.CDLL:
     dll.alSourcePlay.restype = None
     dll.alSourceStop.argtypes = [ctypes.c_uint]
     dll.alSourceStop.restype = None
+    dll.alSourcePause.argtypes = [ctypes.c_uint]
+    dll.alSourcePause.restype = None
+    dll.alSourceQueueBuffers.argtypes = [ctypes.c_uint, ctypes.c_int, ctypes.POINTER(ctypes.c_uint)]
+    dll.alSourceQueueBuffers.restype = None
+    dll.alSourceUnqueueBuffers.argtypes = [ctypes.c_uint, ctypes.c_int, ctypes.POINTER(ctypes.c_uint)]
+    dll.alSourceUnqueueBuffers.restype = None
     dll.alGetSourcei.argtypes = [ctypes.c_uint, ctypes.c_int, ctypes.POINTER(ctypes.c_int)]
     dll.alGetSourcei.restype = None
     dll.alListenerf.argtypes = [ctypes.c_int, ctypes.c_float]
@@ -528,7 +626,13 @@ class OpenALSoundPlayer:
         self._idle: deque[int] = deque()
         self._active: deque[int] = deque()
         self._retiring: deque[int] = deque()
+        #: The gain each voice was started at, so a steal ramps down from the
+        #: level it was actually playing at. Written by play, read by the
+        #: worker when it admits a retiring voice; distinct keys, no lock.
+        self._voice_gains: dict[int, float] = {}
         self._state_scratch = ctypes.c_int(0)
+        self._speech_streams: weakref.WeakSet[OpenALSpeechStream] = weakref.WeakSet()
+        self._speech_streams_lock = threading.Lock()
 
         self._device = None
         self._context = None
@@ -571,8 +675,10 @@ class OpenALSoundPlayer:
             self._create_voice_pool()
             self._create_reverb_bus()
             self._bind_reopen()
-            self._volume = self._read_volume()
-            self._al.alListenerf(AL_GAIN, ctypes.c_float(self._volume))
+            # Unity, and left there: the listener gain scales every source in
+            # the context, speech included, and speech volume is the synth's.
+            # Role-sound volume is a per-voice gain written by play (ADR 0008).
+            self._al.alListenerf(AL_GAIN, ctypes.c_float(1.0))
             self._check_al("initial setup")
             self._worker = threading.Thread(
                 target=self._run_worker, name="unspoken-sound-player", daemon=True
@@ -602,13 +708,6 @@ class OpenALSoundPlayer:
         except Exception as error:
             log.error(f"Unspoken: settings provider could not report the output device: {error}")
             return None
-
-    def _read_volume(self) -> float:
-        try:
-            return float(self._settings.volume)
-        except Exception as error:
-            log.error(f"Unspoken: settings provider could not report the volume: {error}")
-            return 1.0
 
     def _open_device(self, configured: str | None) -> None:
         """Open the configured device; on NULL retry once against the default.
@@ -771,12 +870,9 @@ class OpenALSoundPlayer:
             if buffer_id is None:
                 return
 
-            # Compare-on-play: two reads from the settings provider, ahead of
-            # alSourcePlay.
-            volume = self._settings.volume
-            if volume != self._volume:
-                self._volume = volume
-                self._al.alListenerf(AL_GAIN, ctypes.c_float(volume))
+            # Two reads from the settings provider, ahead of alSourcePlay: the
+            # volume this voice starts at, and the device compared below.
+            volume = float(self._settings.volume)
             device = self._settings.output_device
             if device != self._requested_device:
                 # Compare against what was last *requested*, and update it even
@@ -804,9 +900,12 @@ class OpenALSoundPlayer:
                     ctypes.c_float(position[1]),
                     ctypes.c_float(position[2]),
                 )
-                # Voices come back from a steal with a ramped-down gain; one
-                # cheap write makes "silent role sound" unrepresentable.
-                al.alSourcef(voice, AL_GAIN, ctypes.c_float(1.0))
+                # The role-sound volume, per voice rather than on the listener
+                # so speech sharing the context is not scaled by it. The same
+                # write resets a voice that came back from a steal with a
+                # ramped-down gain.
+                self._voice_gains[voice] = volume
+                al.alSourcef(voice, AL_GAIN, ctypes.c_float(volume))
                 al.alSourcePlay(voice)
                 self._active.append(voice)
                 placed = True
@@ -961,6 +1060,30 @@ class OpenALSoundPlayer:
         self._al.alAuxiliaryEffectSloti(self._effect_slot.value, AL_EFFECTSLOT_EFFECT, effect)
         self._check_al(f"reverb {preset}")
 
+    # -- speech (any thread) -------------------------------------------------
+
+    def open_speech_stream(self, samples_per_sec: int) -> OpenALSpeechStream | None:
+        """A streaming source for one synth's mono 16-bit speech (ADR 0008).
+
+        Called once per synth wave player, at the first utterance routed here,
+        on whatever thread that synth feeds from. Never raises: a stream that
+        cannot be built is None, and speech stays on nvwave.
+        """
+        if self._closed or samples_per_sec <= 0:
+            return None
+        try:
+            stream = OpenALSpeechStream(self, int(samples_per_sec))
+        except Exception as error:
+            self._log_once("speech_stream", f"Unspoken: could not open a speech stream: {error}")
+            return None
+        with self._speech_streams_lock:
+            if self._closed:
+                # close() ran while the stream was being built; it never saw it.
+                stream.close()
+                return None
+            self._speech_streams.add(stream)
+        return stream
+
     # -- the OpenAL C thread ------------------------------------------------
 
     def _on_alc_event(self, event_type, device_type, device, length, message, user_param) -> None:
@@ -1026,7 +1149,7 @@ class OpenALSoundPlayer:
         worse: a 31-470 ms reopen would freeze those envelopes at an audible
         gain, which is the artefact this design exists to avoid.
         """
-        fading: list[list[int]] = []  # [voice, tick]
+        fading: list[list] = []  # [voice, tick, gain the voice started at]
         # Ticks 0..len(RAMP_STEPS)-1 write a gain (the last of them zero), then
         # RAMP_ZERO_HOLD_TICKS pass at zero before the voice is stopped.
         last_tick = len(RAMP_STEPS) - 1 + RAMP_ZERO_HOLD_TICKS
@@ -1039,18 +1162,23 @@ class OpenALSoundPlayer:
             else:
                 while self._retiring:
                     try:
-                        fading.append([self._retiring.popleft(), 0])
+                        voice = self._retiring.popleft()
                     except IndexError:  # pragma: no cover - nobody else pops it
                         break
+                    # The steps are fractions of the level the voice is at:
+                    # an absolute 0.6 would jump a quiet voice *up* first.
+                    fading.append([voice, 0, self._voice_gains.get(voice, 1.0)])
             if not fading:
                 return
             still_fading = []
             for entry in fading:
-                voice, tick = entry
+                voice, tick, start_gain = entry
                 entry[1] = tick + 1
                 try:
                     if tick < len(RAMP_STEPS):
-                        self._al.alSourcef(voice, AL_GAIN, ctypes.c_float(RAMP_STEPS[tick]))
+                        self._al.alSourcef(
+                            voice, AL_GAIN, ctypes.c_float(RAMP_STEPS[tick] * start_gain)
+                        )
                         still_fading.append(entry)
                         continue
                     if tick < last_tick:  # sit at zero while the mixer catches up
@@ -1247,6 +1375,14 @@ class OpenALSoundPlayer:
                     )
                 self._events_registered = False
 
+            # Speech streams own sources in this context, so they go before
+            # the context does. Closing one releases any synth blocked in it.
+            with self._speech_streams_lock:
+                streams = list(self._speech_streams)
+                self._speech_streams.clear()
+            for stream in streams:
+                stream.close()
+
             worker = self._worker
             if worker is not None:
                 self._stopping = True
@@ -1267,6 +1403,7 @@ class OpenALSoundPlayer:
             self._idle.clear()
             self._active.clear()
             self._retiring.clear()
+            self._voice_gains.clear()
 
             if self._effect_slot.value:
                 self._al.alAuxiliaryEffectSloti(
@@ -1326,3 +1463,342 @@ class OpenALSoundPlayer:
             return
         self._logged.add(key)
         getattr(log, level)(message)
+
+
+# --------------------------------------------------------------------------
+# The speech stream (ADR 0008)
+# --------------------------------------------------------------------------
+
+
+class _Chunk:
+    """One fed chunk: its buffer (None for a marker), its length, its callback."""
+
+    __slots__ = ("buffer_id", "frames", "on_done")
+
+    def __init__(self, buffer_id: int | None, frames: int, on_done) -> None:
+        self.buffer_id = buffer_id
+        self.frames = frames
+        self.on_done = on_done
+
+
+class OpenALSpeechStream:
+    """One synth's speech as a streaming source in the Sound Player's context.
+
+    The source is placed exactly like a role-sound voice -- listener-relative,
+    no distance model -- so speech and the earcon that preceded it are
+    rendered by one HRTF, on one clock. It is deliberately *dry*: no send to
+    the shared reverb bus. Reverb helps an earcon's position be heard, and it
+    smears speech, which has to be understood. What differs is delivery: chunks are queued as they
+    arrive and recycled as they finish, and played chunks' `onDone` callbacks
+    are run outside the lock by whichever thread recycled them -- the service
+    thread while speech plays out, or a feeding thread, as nvwave's own `feed`
+    fires pending callbacks.
+
+    Every piece of state is behind `_cond`. OpenAL calls are made under it --
+    they are short, and the order of recycle, queue and play matters -- but
+    callbacks never are: a callback may call straight back into `stop`.
+
+    The order matters because of one OpenAL rule: a source that has run dry is
+    STOPPED, and a stopped source reports *every* buffer in its queue as
+    processed, including any queued after it stopped. So audio is only ever
+    queued onto a stopped source after everything played has been recycled,
+    and the source is started in the same locked section -- otherwise the
+    next recycle would throw unplayed audio away, or `alSourcePlay` would
+    replay played audio from the head of the queue. While paused, such a
+    source is *held*: its queue is all unplayed, and nothing is recycled from
+    it until it is resumed.
+    """
+
+    def __init__(self, owner: OpenALSoundPlayer, samples_per_sec: int) -> None:
+        self._owner = owner
+        self._al = owner._al
+        self._rate = samples_per_sec
+        self._capacity_frames = int(samples_per_sec * SPEECH_QUEUE_SECONDS)
+        self._cond = threading.Condition()
+        self._chunks: deque[_Chunk] = deque()
+        self._queued_frames = 0
+        #: Callbacks recycled but not yet run. `sync` waits for these too: a
+        #: synth that idles and then expects its last index to have fired must
+        #: not be told the audio is done before it has.
+        self._in_flight = 0
+        #: Bumped by `stop`, so a `feed` or `sync` that was waiting across a
+        #: stop can tell its utterance is gone.
+        self._generation = 0
+        self._paused = False
+        #: The source is stopped and everything queued on it is unplayed.
+        self._held = False
+        self._closed = False
+        self._scratch = ctypes.c_int(0)
+
+        source = ctypes.c_uint(0)
+        self._al.alGenSources(1, ctypes.byref(source))
+        if not source.value:
+            raise RuntimeError("alGenSources returned no speech source")
+        self._source = source.value
+        al = self._al
+        al.alSourcei(self._source, AL_SOURCE_RELATIVE, AL_TRUE)
+        al.alSourcef(self._source, AL_REFERENCE_DISTANCE, ctypes.c_float(1.0))
+        al.alSourcef(self._source, AL_ROLLOFF_FACTOR, ctypes.c_float(0.0))
+        al.alSourcef(self._source, AL_GAIN, ctypes.c_float(1.0))
+        al.alSource3f(
+            self._source, AL_POSITION, ctypes.c_float(0.0), ctypes.c_float(0.0), ctypes.c_float(-1.0)
+        )
+        # Dry, stated rather than left to the default: whatever the Reverb
+        # setting, speech never reaches the bus.
+        al.alSource3i(self._source, AL_AUXILIARY_SEND_FILTER, 0, 0, AL_FILTER_NULL)
+        self._thread = threading.Thread(
+            target=self._run, name="unspoken-speech-stream", daemon=True
+        )
+        self._thread.start()
+
+    # -- nvwave's contract --------------------------------------------------
+
+    def feed(self, data: bytes, on_done=None) -> None:
+        """Queue one chunk, blocking while the queue is full. Never raises."""
+        due = []
+        try:
+            with self._cond:
+                if self._closed:
+                    due = self._completed_now(on_done)
+                else:
+                    generation = self._generation
+                    while (
+                        self._queued_frames >= self._capacity_frames
+                        and not self._closed
+                        and generation == self._generation
+                    ):
+                        self._cond.wait(SPEECH_WAIT_SECONDS)
+                    if self._closed:
+                        due = self._completed_now(on_done)
+                    elif generation == self._generation:
+                        due = self._enqueue(data, on_done)
+                    # Otherwise a stop landed while this feed waited: the
+                    # utterance is gone, and nvwave drops its callbacks too.
+        except Exception as error:
+            self._owner._log_once("speech_feed", f"Unspoken: feeding speech failed: {error}")
+        self._complete(due)
+
+    def stop(self) -> None:
+        """Cut playback and drop everything queued, callbacks included."""
+        try:
+            with self._cond:
+                self._generation += 1
+                self._paused = False
+                if not self._closed:
+                    self._flush()
+                self._cond.notify_all()
+        except Exception as error:
+            self._owner._log_once("speech_stop", f"Unspoken: stopping speech failed: {error}")
+
+    def sync(self) -> None:
+        """Block until everything fed has played and its callbacks have run."""
+        if threading.current_thread() is self._thread:
+            return  # a callback asking to wait for itself
+        try:
+            with self._cond:
+                generation = self._generation
+                deadline = self._deadline()
+                while (
+                    (self._chunks or self._in_flight)
+                    and not self._closed
+                    and generation == self._generation
+                ):
+                    if self._paused:
+                        deadline = self._deadline()
+                    elif time.monotonic() >= deadline:
+                        # The audio should long since have played. Something
+                        # below us is wedged; a synth thread blocked forever is
+                        # worse than an early return.
+                        self._owner._log_once(
+                            "speech_sync", "Unspoken: speech did not drain in time; stopped waiting"
+                        )
+                        return
+                    self._cond.wait(SPEECH_WAIT_SECONDS)
+        except Exception as error:
+            self._owner._log_once("speech_sync_error", f"Unspoken: syncing speech failed: {error}")
+
+    def pause(self, switch: bool) -> None:
+        try:
+            with self._cond:
+                if self._closed:
+                    return
+                self._paused = bool(switch)
+                if self._paused:
+                    # A no-op on a stopped source, which then stays stopped.
+                    self._al.alSourcePause(self._source)
+                elif self._held:
+                    self._held = False
+                    self._al.alSourcePlay(self._source)
+                elif self._state() == AL_PAUSED:
+                    self._al.alSourcePlay(self._source)
+                self._cond.notify_all()
+        except Exception as error:
+            self._owner._log_once("speech_pause", f"Unspoken: pausing speech failed: {error}")
+
+    def set_position(self, position: tuple[float, float, float]) -> None:
+        try:
+            with self._cond:
+                if self._closed:
+                    return
+                self._al.alSource3f(
+                    self._source,
+                    AL_POSITION,
+                    ctypes.c_float(position[0]),
+                    ctypes.c_float(position[1]),
+                    ctypes.c_float(position[2]),
+                )
+        except Exception as error:
+            self._owner._log_once("speech_position", f"Unspoken: placing speech failed: {error}")
+
+    def close(self) -> None:
+        """Stop, release anything blocked, and give the source back. Idempotent."""
+        with self._cond:
+            if self._closed:
+                return
+            self._closed = True
+            self._generation += 1
+            try:
+                self._flush()
+            except Exception as error:
+                log.error(f"Unspoken: could not flush a speech stream: {error}")
+            self._cond.notify_all()
+        if threading.current_thread() is not self._thread:
+            self._thread.join(timeout=5.0)
+        try:
+            self._al.alSourcei(self._source, AL_BUFFER, AL_NONE)
+            source = ctypes.c_uint(self._source)
+            self._al.alDeleteSources(1, ctypes.byref(source))
+        except Exception as error:
+            log.error(f"Unspoken: could not delete a speech source: {error}")
+
+    # -- under the lock -----------------------------------------------------
+
+    def _enqueue(self, data: bytes, on_done) -> list:
+        """Queue one chunk; return the callbacks the recycle ahead of it made due."""
+        frames = len(data) // 2
+        if not frames:
+            if on_done is not None:
+                self._chunks.append(_Chunk(None, 0, on_done))
+                self._cond.notify_all()
+            return []
+        al = self._al
+        # Everything played goes first, so that if the source has run dry the
+        # queue below holds only what has not been heard (see the class
+        # docstring for why that has to be true before alSourcePlay).
+        due = self._recycle()
+        buffer_id = ctypes.c_uint(0)
+        al.alGenBuffers(1, ctypes.byref(buffer_id))
+        al.alBufferData(buffer_id.value, AL_FORMAT_MONO16, data, frames * 2, self._rate)
+        al.alSourceQueueBuffers(self._source, 1, ctypes.byref(buffer_id))
+        self._chunks.append(_Chunk(buffer_id.value, frames, on_done))
+        self._queued_frames += frames
+        if not self._held and self._state() not in (AL_PLAYING, AL_PAUSED):
+            # Initial, or run dry: start now rather than at the next service
+            # tick, because this is the onset of speech.
+            if self._paused:
+                self._held = True
+            else:
+                al.alSourcePlay(self._source)
+        self._cond.notify_all()
+        return due
+
+    def _recycle(self) -> list:
+        """Unqueue what has played and pop its chunks; return the callbacks due."""
+        if self._held:
+            return []  # stopped, but nothing on it has been heard yet
+        processed = self._count(AL_BUFFERS_PROCESSED)
+        self._unqueue(processed)
+        due = []
+        chunks = self._chunks
+        while chunks:
+            chunk = chunks[0]
+            if chunk.buffer_id is not None:
+                if not processed:
+                    break
+                processed -= 1
+                self._queued_frames -= chunk.frames
+            chunks.popleft()
+            if chunk.on_done is not None:
+                due.append(chunk.on_done)
+        self._in_flight += len(due)
+        if due:
+            self._cond.notify_all()
+        return due
+
+    def _completed_now(self, on_done) -> list:
+        """A callback for audio that will never play, due at once."""
+        if on_done is None:
+            return []
+        self._in_flight += 1
+        return [on_done]
+
+    def _flush(self) -> None:
+        """Stop the source and free every buffer; callbacks are dropped."""
+        self._al.alSourceStop(self._source)
+        # A stopped source has processed everything it held.
+        self._unqueue(self._count(AL_BUFFERS_QUEUED))
+        self._chunks.clear()
+        self._queued_frames = 0
+        self._held = False
+
+    def _state(self) -> int:
+        self._al.alGetSourcei(self._source, AL_SOURCE_STATE, ctypes.byref(self._scratch))
+        return self._scratch.value
+
+    def _count(self, token: int) -> int:
+        self._al.alGetSourcei(self._source, token, ctypes.byref(self._scratch))
+        return max(0, self._scratch.value)
+
+    def _unqueue(self, count: int) -> None:
+        if count <= 0:
+            return
+        ids = (ctypes.c_uint * count)()
+        self._al.alSourceUnqueueBuffers(self._source, count, ids)
+        self._al.alDeleteBuffers(count, ids)
+
+    def _service(self) -> list:
+        """One service tick: recycle, or complete everything if no one can hear it."""
+        owner = self._owner
+        if owner._disconnected or owner._closed:
+            # Complete rather than strand the speech manager on indexes that
+            # would never be reached.
+            due = [chunk.on_done for chunk in self._chunks if chunk.on_done is not None]
+            self._flush()
+            self._in_flight += len(due)
+            self._cond.notify_all()
+            return due
+        return self._recycle()
+
+    def _deadline(self) -> float:
+        return time.monotonic() + self._queued_frames / self._rate + 2.0
+
+    # -- outside the lock ---------------------------------------------------
+
+    def _complete(self, callbacks) -> None:
+        """Run recycled callbacks, then let `sync` know they have run."""
+        if not callbacks:
+            return
+        for callback in callbacks:
+            try:
+                callback()
+            except Exception:
+                log.error("Unspoken: a speech onDone callback raised", exc_info=True)
+        with self._cond:
+            self._in_flight -= len(callbacks)
+            self._cond.notify_all()
+
+    def _run(self) -> None:
+        """The service thread: sleeps while nothing is queued, ticks while speech plays."""
+        while True:
+            due = []
+            try:
+                with self._cond:
+                    while not self._chunks and not self._closed:
+                        self._cond.wait()
+                    if self._closed:
+                        return
+                    due = self._service()
+            except Exception as error:  # a dead service thread strands the synth
+                self._owner._log_once("speech_service", f"Unspoken: speech service error: {error}")
+            self._complete(due)
+            time.sleep(SPEECH_SERVICE_SECONDS)

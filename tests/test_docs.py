@@ -25,7 +25,7 @@ BUILD_VARS = (REPO / "buildVars.py").read_text(encoding="utf-8")
 ADR_DIR = REPO / "docs" / "adr"
 
 
-# --- the five settings -----------------------------------------------------
+# --- the six settings -----------------------------------------------------
 
 
 def test_readme_documents_every_setting_in_the_spec(settings):
@@ -35,6 +35,7 @@ def test_readme_documents_every_setting_in_the_spec(settings):
         "roleAnnouncement": "Role announcement",
         "reverb": "Reverb",
         "volume": "Sound volume",
+        "spatialSpeech": "Spatial speech",
         "silenceDuringSayAll": "Silence role sounds during say all",
     }
     assert set(labels) == set(settings.CONF_SPEC), (
@@ -65,6 +66,17 @@ def test_readme_role_announcement_choices_match_the_spec(settings):
         "speechOnly": "Speech only",
     }
     assert set(documented) == set(settings.ROLE_ANNOUNCEMENT_VALUES)
+    for label in documented.values():
+        assert f"*{label}*" in README, f"README does not name the {label!r} choice"
+
+
+def test_readme_spatial_speech_choices_match_the_spec(settings):
+    documented = {
+        "none": "None",
+        "panning": "Panning",
+        "hrtf": "Panning and HRTF",
+    }
+    assert set(documented) == set(settings.SPATIAL_SPEECH_MODES)
     for label in documented.values():
         assert f"*{label}*" in README, f"README does not name the {label!r} choice"
 
