@@ -110,3 +110,32 @@ def test_desktop_offset_is_accounted_for():
         (0.0, math.sin(math.radians(-15.0)), -math.cos(math.radians(-15.0))),
         abs=1e-9,
     )
+
+
+@pytest.mark.parametrize(
+    ("x", "left", "right"),
+    [
+        (0.0, 1.0, 1.0),  # straight ahead is exactly as loud as unpanned speech
+        (-1.0, 1.0, 0.0),
+        (1.0, 0.0, 1.0),
+        (-5.0, 1.0, 0.0),  # clamped, like the azimuth
+    ],
+)
+def test_pan_gains_at_the_landmarks(x, left, right):
+    assert spatial.pan_gains((x, 0.0, -1.0)) == pytest.approx((left, right), abs=1e-9)
+
+
+def test_pan_gains_never_exceed_unity_and_fall_away_monotonically():
+    previous_right = -1.0
+    for step in range(-20, 21):
+        left, right = spatial.pan_gains((step / 20.0, 0.0, -1.0))
+        assert 0.0 <= left <= 1.0 and 0.0 <= right <= 1.0
+        assert right >= previous_right
+        previous_right = right
+
+
+def test_pan_gains_follow_the_role_sound_position():
+    """Panning reads the same vector the earcon was placed with."""
+    position = spatial.position_for((0, 490, 100, 100), DESKTOP_RECT)
+    left, right = spatial.pan_gains(position)
+    assert left == pytest.approx(1.0) and right < 0.2

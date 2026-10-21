@@ -19,6 +19,7 @@ def test_conf_spec_matches_the_configuration_schema():
             'option("none", "smallRoom", "mediumRoom", "hall", default="smallRoom")'
         ),
         "volume": "integer(default=100, min=0, max=100)",
+        "spatialSpeech": 'option("none", "panning", "hrtf", default="none")',
         "silenceDuringSayAll": "boolean(default=False)",
     }
 
@@ -29,6 +30,7 @@ def test_defaults_cover_exactly_the_config_keys():
         "roleAnnouncement",
         "reverb",
         "volume",
+        "spatialSpeech",
         "silenceDuringSayAll",
     )
     assert set(settings.DEFAULTS) == set(settings.CONFIG_KEYS)
@@ -40,3 +42,8 @@ def test_the_theme_library_falls_back_to_the_declared_default_theme():
 
 def test_the_sound_player_accepts_exactly_the_declared_reverb_presets():
     assert set(player.REVERB_PRESETS) == set(settings.REVERB_PRESETS)
+
+
+def test_spatial_speech_defaults_to_leaving_speech_alone():
+    """An upgrade must not move anyone's speech: the feature is opt-in."""
+    assert settings.DEFAULTS["spatialSpeech"] == "none"

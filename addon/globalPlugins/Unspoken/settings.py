@@ -1,6 +1,6 @@
 """Spec section 8's configuration surface, declared once.
 
-These are the five keys of ``config.conf["unspoken"]``. The allowed values,
+These are the six keys of ``config.conf["unspoken"]``. The allowed values,
 the defaults, and the ConfigObj spec NVDA validates against all derive from
 the declarations here, so adding a key or a value is a change to this file
 alone.
@@ -18,16 +18,23 @@ ROLE_ANNOUNCEMENT_VALUES = ("sounds", "soundsAndSpeech", "speechOnly")
 #: The reverb preset names the Sound Player accepts, in the order the panel offers them.
 REVERB_PRESETS = ("none", "smallRoom", "mediumRoom", "hall")
 
+#: Where speech is placed, in the order the panel offers them (ADR 0008).
+#: "none" leaves speech exactly where nvwave puts it; "panning" pans it
+#: left/right to where the last role sound came from, still on nvwave; "hrtf"
+#: moves it onto the Sound Player's own device, rendered like a role sound.
+SPATIAL_SPEECH_MODES = ("none", "panning", "hrtf")
+
 #: Spec section 8's defaults, the one place they are written down.
 DEFAULTS = {
     "theme": "default",
     "roleAnnouncement": "sounds",
     "reverb": "smallRoom",
     "volume": 100,
+    "spatialSpeech": "none",
     "silenceDuringSayAll": False,
 }
 
-#: The five config keys, in the panel's order.
+#: The six config keys, in the panel's order.
 CONFIG_KEYS = tuple(DEFAULTS)
 
 
@@ -45,5 +52,6 @@ CONF_SPEC = {
     ),
     "reverb": _option(REVERB_PRESETS, DEFAULTS["reverb"]),
     "volume": "integer(default=100, min=0, max=100)",
+    "spatialSpeech": _option(SPATIAL_SPEECH_MODES, DEFAULTS["spatialSpeech"]),
     "silenceDuringSayAll": f'boolean(default={DEFAULTS["silenceDuringSayAll"]})',
 }

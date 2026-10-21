@@ -15,7 +15,7 @@ Unfortunately, previous versions of Unspoken had many serious problems due to th
 
 * **NVDA 2026.1 or later**, 64-bit. The addon bundles the x64 build of OpenAL Soft and is marked incompatible below 2026.1; older NVDA will refuse to enable it.
 * **Headphones**, for anything but the plainest use. The whole point is left/right and up/down placement, and laptop speakers will not reproduce it.
-* If the original **Unspoken 1.x** is still installed, remove it. It is incompatible with this NVDA anyway, and both addons patch NVDA's speech path. Note that upgrading migrates your old settings to the five below and then deletes the legacy keys, which the ancestor also used.
+* If the original **Unspoken 1.x** is still installed, remove it. It is incompatible with this NVDA anyway, and both addons patch NVDA's speech path. Note that upgrading migrates your old settings to the ones below and then deletes the legacy keys, which the ancestor also used.
 
 ## The Solution
 
@@ -33,7 +33,7 @@ In the case of this project, I'm really just the releaser, documenter, and conta
 
 ## Using the addon
 
-Once installed, the addon adds an **Unspoken-ng** category under NVDA menu → Preferences → Settings. It has five settings:
+Once installed, the addon adds an **Unspoken-ng** category under NVDA menu → Preferences → Settings. It has six settings:
 
 * **Sound theme** — which set of sounds to play. Ships with one, *Default*; any theme you install (see below) appears in this list. The selected theme is loaded as you browse the list, so the next control sound you hear — tabbing on through the panel, for instance — is already the new one. Cancelling the dialog puts your previous theme back.
 * **Role announcement** — how control roles are announced:
@@ -42,6 +42,12 @@ Once installed, the addon adds an **Unspoken-ng** category under NVDA menu → P
   * *Speech only* — no sounds; NVDA speaks roles as it would without the addon
 * **Reverb** — the space the sounds are placed in: *None*, *Small room* (the default), *Medium room*, or *Hall*. Larger spaces make position easier to hear and the sound itself slightly longer.
 * **Sound volume** — how loud role sounds are, from 0 to 100 with a default of 100. This sits on top of NVDA's own rules: role sounds already follow *Volume of NVDA sounds*, or your voice volume when *Volume of NVDA sounds follows voice volume* is on in NVDA's Audio settings, and this slider trims relative to that. Changes apply as the slider moves, so the next control sound you hear is already at the new level.
+* **Spatial speech** — whether your synthesizer's speech comes from where the role sound did, so the sound and the words about the control land in the same place:
+  * *None* (the default) — speech plays exactly as it would without the addon
+  * *Panning* — speech is panned left or right to where you arrived: the focused control, the object you navigated to, or the field quick navigation landed on. It still plays through NVDA's own audio output.
+  * *Panning and HRTF* — speech is placed in 3D, up and down as well as left and right, by the same engine and in the same room (**Reverb**) as the role sounds. Use headphones. If the addon is running without sound, this falls back to *Panning*.
+
+  Speech moves only between utterances, never mid-sentence, and stays where you last arrived while say all reads on. Changes apply from the next thing NVDA says. It works with synthesizers that run inside NVDA, which covers eSpeak, Windows OneCore, SAPI 5 and most add-on synthesizers. SAPI 4 and 32-bit SAPI 5 voices, which NVDA runs in a separate process, are not placed.
 * **Silence role sounds during say all** — off by default. Turn it on if you find the sounds distracting while reading continuously.
 
 If the addon cannot produce sound at all — no audio device, or a broken install — it says so once, shortly after NVDA starts, and then runs speech-only for the session. Your settings are left alone, so fixing the problem restores sounds with nothing to set again.

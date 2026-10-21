@@ -100,10 +100,6 @@ def listener_gain(sound_player):
     return value.value
 
 
-def set_listener_gain(sound_player, value):
-    sound_player._al.alListenerf(player.AL_GAIN, ctypes.c_float(value))
-
-
 def playing_voices(sound_player):
     state = ctypes.c_int(0)
     count = 0
@@ -174,7 +170,7 @@ def loaded(make_player):
 # --------------------------------------------------------------------------
 
 
-def test_silent_adapter_is_four_no_ops_and_never_raises():
+def test_silent_adapter_is_no_ops_and_never_raises():
     silent = player.SilentSoundPlayer()
     assert silent.play("button", POSITION) is None
     assert silent.play("no-such-slot", (1e9, float("nan"), -0.0)) is None
@@ -185,14 +181,16 @@ def test_silent_adapter_is_four_no_ops_and_never_raises():
     assert silent.close() is None
     assert silent.close() is None  # idempotent, like the real one
     assert silent.play("button", POSITION) is None  # still a no-op after close
+    assert silent.open_speech_stream(22050) is None, "a degraded session keeps speech on nvwave"
 
 
 def test_silent_adapter_has_the_seam_and_nothing_else():
     silent = player.SilentSoundPlayer()
     assert isinstance(silent, player.SoundPlayer)
     public = {name for name in vars(type(silent)) if not name.startswith("_")}
-    assert public == {"play", "set_theme", "set_reverb", "close"}, (
-        "degradedness lives in the wiring: no is_silent, no fifth method"
+    assert public == {"play", "set_theme", "set_reverb", "close", "open_speech_stream"}, (
+        "degradedness lives in the wiring: no is_silent; the four commands plus "
+        "the speech stream of ADR 0008, and nothing else"
     )
 
 
@@ -409,22 +407,36 @@ def test_a_construction_failure_that_is_not_a_missing_endpoint_is_not_skippable(
 # --------------------------------------------------------------------------
 
 
+def source_gain(sound_player, source):
+    dll = sound_player._al
+    dll.alGetSourcef.argtypes = [ctypes.c_uint, ctypes.c_int, ctypes.POINTER(ctypes.c_float)]
+    dll.alGetSourcef.restype = None
+    value = ctypes.c_float(-1.0)
+    dll.alGetSourcef(source, player.AL_GAIN, ctypes.byref(value))
+    return value.value
+
+
 def test_volume_change_is_picked_up_by_the_next_play(loaded):
     settings = loaded._settings
+    settings.level = 0.0
     loaded.play("button", POSITION)
-    assert listener_gain(loaded) == pytest.approx(0.0)
+    first = loaded._active[-1]
+    assert source_gain(loaded, first) == pytest.approx(0.0)
 
     settings.level = 0.25
     loaded.play("button", POSITION)
-    assert listener_gain(loaded) == pytest.approx(0.25), "volume mismatch is applied inline"
+    second = loaded._active[-1]
+    assert source_gain(loaded, second) == pytest.approx(0.25), "the next voice starts at the new volume"
 
 
-def test_an_unchanged_volume_is_not_rewritten_on_every_play(loaded):
+def test_role_sound_volume_never_touches_the_listener(loaded):
+    """The listener scales speech too (ADR 0008), so volume is per voice."""
+    loaded._settings.level = 0.25
     loaded.play("button", POSITION)
-    set_listener_gain(loaded, 0.02)  # behind the player's back
-    loaded.play("button", POSITION)
-    loaded.play("button", POSITION)
-    assert listener_gain(loaded) == pytest.approx(0.02), "play compares before it writes"
+    assert listener_gain(loaded) == pytest.approx(1.0)
+    assert loaded._voice_gains[loaded._active[-1]] == pytest.approx(0.25), (
+        "the ramp needs the level the voice started at"
+    )
 
 
 def test_a_device_change_is_noticed_by_play_and_handed_to_the_worker(loaded):
@@ -828,3 +840,148 @@ def test_close_is_idempotent_and_everything_after_it_is_a_no_op(make_player):
     adapter.set_theme(theme())
     adapter.set_reverb("hall")
     assert not adapter._playable
+
+
+# --------------------------------------------------------------------------
+# the speech stream (ADR 0008)
+# --------------------------------------------------------------------------
+
+SPEECH_RATE = 22050
+
+
+def silence(milliseconds, rate=SPEECH_RATE):
+    """Digital silence: the whole path down to the mixer, and nothing audible."""
+    return bytes(int(rate * milliseconds / 1000.0) * 2)
+
+
+@pytest.fixture
+def stream(make_player):
+    adapter = make_player()
+    opened = adapter.open_speech_stream(SPEECH_RATE)
+    assert opened is not None
+    yield opened
+    opened.close()
+
+
+def test_a_speech_stream_satisfies_its_contract(stream):
+    assert isinstance(stream, player.SpeechStream)
+
+
+def test_callbacks_fire_in_order_and_before_sync_returns(stream):
+    fired = []
+    for index in range(4):
+        stream.feed(silence(30), lambda index=index: fired.append(index))
+    stream.sync()
+    assert fired == [0, 1, 2, 3], "sync must not return before the last onDone ran"
+
+
+def test_an_empty_feed_is_a_marker_behind_the_audio_before_it(stream):
+    """SAPI 5 places bookmarks as zero-length feeds carrying only a callback."""
+    fired = []
+    stream.feed(silence(60), lambda: fired.append("audio"))
+    stream.feed(b"", lambda: fired.append("bookmark"))
+    stream.sync()
+    assert fired == ["audio", "bookmark"]
+
+
+def test_a_marker_on_an_idle_stream_fires_at_once(stream):
+    fired = []
+    stream.feed(b"", lambda: fired.append("bookmark"))
+    assert wait_until(lambda: fired == ["bookmark"], timeout=1.0)
+
+
+def test_stop_drops_pending_callbacks_as_nvwave_does(stream):
+    fired = []
+    stream.feed(silence(300), lambda: fired.append("cut"))
+    stream.stop()
+    stream.sync()
+    time.sleep(0.05)
+    assert fired == []
+    assert stream._queued_frames == 0
+
+
+def test_a_full_queue_blocks_feed_until_stop_releases_it(stream):
+    import threading
+
+    stream.pause(True)  # nothing drains: the queue stays full
+    stream.feed(silence(int(player.SPEECH_QUEUE_SECONDS * 1000) + 50))
+    fired = []
+    blocked = threading.Thread(target=lambda: stream.feed(silence(20), lambda: fired.append("late")))
+    blocked.start()
+    blocked.join(timeout=0.2)
+    assert blocked.is_alive(), "feed returned with the queue already full"
+
+    stream.stop()
+    blocked.join(timeout=1.0)
+    assert not blocked.is_alive(), "stop did not release a blocked feed"
+    time.sleep(0.05)
+    assert fired == [], "audio from the stopped utterance was queued anyway"
+
+
+def test_a_device_loss_completes_speech_instead_of_stranding_it(stream):
+    """The speech manager waits on these callbacks; a dead device must not hang it."""
+    fired = []
+    stream.pause(True)
+    stream.feed(silence(200), lambda: fired.append("done"))
+    stream._owner._disconnected = True
+    try:
+        assert wait_until(lambda: fired == ["done"], timeout=1.0)
+    finally:
+        stream._owner._disconnected = False
+
+
+def test_a_closed_stream_completes_every_feed_immediately(stream):
+    stream.close()
+    fired = []
+    stream.feed(silence(30), lambda: fired.append("after close"))
+    assert fired == ["after close"]
+    stream.sync()  # returns, rather than waiting on a source that is gone
+    stream.close()  # idempotent
+
+
+def test_closing_the_player_closes_its_speech_streams(make_player):
+    adapter = make_player()
+    opened = adapter.open_speech_stream(SPEECH_RATE)
+    adapter.close()
+    assert opened._closed
+    assert adapter.open_speech_stream(SPEECH_RATE) is None
+
+
+def test_speech_is_rendered_like_a_role_sound(stream):
+    """Listener-relative, no distance model, on the shared reverb bus."""
+    al = stream._al
+    relative = ctypes.c_int(-1)
+    al.alGetSourcei(stream._source, player.AL_SOURCE_RELATIVE, ctypes.byref(relative))
+    assert relative.value == player.AL_TRUE
+    stream.set_position((1.0, 0.0, 0.0))
+    al.alGetSource3f = getattr(al, "alGetSource3f")
+    al.alGetSource3f.argtypes = [ctypes.c_uint, ctypes.c_int] + [ctypes.POINTER(ctypes.c_float)] * 3
+    al.alGetSource3f.restype = None
+    x, y, z = ctypes.c_float(), ctypes.c_float(), ctypes.c_float()
+    al.alGetSource3f(stream._source, player.AL_POSITION, ctypes.byref(x), ctypes.byref(y), ctypes.byref(z))
+    assert (x.value, y.value, z.value) == pytest.approx((1.0, 0.0, 0.0))
+    assert source_gain(stream._owner, stream._source) == pytest.approx(1.0), (
+        "speech volume is the synth's; the role-sound volume must not scale it"
+    )
+
+
+def test_audio_fed_after_the_source_ran_dry_plays_once_not_twice(stream):
+    """A stopped source reports its whole queue processed; nothing may be lost or replayed."""
+    fired = []
+    stream.feed(silence(20), lambda: fired.append("first"))
+    assert wait_until(lambda: stream._state() != player.AL_PLAYING, timeout=1.0)
+    stream.feed(silence(40), lambda: fired.append("second"))
+    stream.sync()
+    assert fired == ["first", "second"]
+    assert stream._count(player.AL_BUFFERS_QUEUED) == 0
+
+
+def test_audio_fed_while_paused_is_held_not_thrown_away(stream):
+    fired = []
+    stream.pause(True)
+    stream.feed(silence(60), lambda: fired.append("held"))
+    time.sleep(0.15)  # far longer than the audio: it must still be waiting
+    assert fired == [], "paused audio was recycled as if it had played"
+    stream.pause(False)
+    stream.sync()
+    assert fired == ["held"]

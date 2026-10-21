@@ -8,10 +8,13 @@ things and nothing else:
 
 - **Wiring.** The config spec and its one-shot migration, the sound theme library
   and the two directories it reads, the settings provider, the Sound Player,
-  the settings panel's live-preview adapter, and -- because it is the thing
-  that attempted the player and caught the failure -- degraded mode.
+  the speech router, the settings panel's live-preview adapter, and -- because
+  it is the thing that attempted the player and caught the failure -- degraded
+  mode.
 - **Entry points.** Three object events, one speech-pipeline hook that places
-  sounds into the speech stream, and one that only suppresses.
+  sounds into the speech stream, and one that only suppresses. The arrivals
+  among them also tell the speech router where speech now comes from
+  (ADR 0008).
 - **The main-thread property reads.** `obj.role` and `obj.location`, once each,
   from the object the event handed us.
 - **Lifetime.** Everything patched here is unpatched in `terminate`.
@@ -54,6 +57,7 @@ import core
 import globalPluginHandler
 import globalVars
 import gui
+import nvwave
 import speech
 import synthDriverHandler
 import textInfos
@@ -62,7 +66,7 @@ import wx
 from logHandler import log
 from speech.commands import CallbackCommand
 
-from . import migration, playback, roles, settings, spatial, themes, volume
+from . import migration, playback, roles, settings, spatial, speechrouter, themes, volume
 from .player import NoAudioEndpointError, OpenALSoundPlayer, SilentSoundPlayer
 
 
@@ -155,6 +159,33 @@ class _NVDASettingsProvider:
         return nvda_gain * volume.gain_from_percent(
             config.conf["unspoken"]["volume"]
         )
+
+
+def _spatial_speech_mode():
+    """The `spatialSpeech` setting, read by the speech router once per utterance.
+
+    Two ConfigObj lookups on the synth's own thread, which is where nvwave
+    itself reads `config.conf["audio"]` on every feed.
+    """
+    return _conf("spatialSpeech")
+
+
+def _make_companion(source):
+    """A stereo wave player matching a synth's mono one, for panned speech.
+
+    Same rate, width, device and ducking as the player it stands in for, and
+    the speech purpose, so nvwave trims its leading silence as it would have
+    trimmed the original's. Raises if the device will not open; the router
+    then leaves that synth's speech unpanned.
+    """
+    return nvwave.WavePlayer(
+        channels=2,
+        samplesPerSec=source.samplesPerSec,
+        bitsPerSample=source.bitsPerSample,
+        outputDevice=config.conf["audio"]["outputDevice"],
+        wantDucking=getattr(source, "_audioDucker", None) is not None,
+        purpose=nvwave.AudioPurpose.SPEECH,
+    )
 
 
 def _synth_volume():
@@ -431,6 +462,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         self._degraded_message_timer = None
         self._preview = None
         self._settings_panel = None
+        self._speech_router = None
 
         # 1. Config. The spec is registered here -- `GlobalPlugin` is its
         #    designed home -- and the migration runs immediately after, before
@@ -526,10 +558,30 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         speech.speech.getPropertiesSpeech = properties_hook
         textInfos.TextInfo.getControlFieldSpeech = control_field_hook
 
+        # 7. The speech router (ADR 0008), last: nothing after it can raise and
+        #    leave nvwave patched by a plugin NVDA never terminates. Installed
+        #    whatever the setting is: it reads the setting per utterance, so
+        #    the panel can change it live, and under "none" every call goes
+        #    straight to nvwave's own method. Its streams come from whichever
+        #    player is current, read at the call: a degraded session's silent
+        #    player has none, and "panning and HRTF" falls back to panning.
+        try:
+            router = speechrouter.SpeechRouter(
+                nvwave.WavePlayer,
+                mode=_spatial_speech_mode,
+                make_companion=_make_companion,
+                open_speech_stream=lambda rate: self._player.open_speech_stream(rate),
+            )
+            router.install()
+            self._speech_router = router
+        except Exception:
+            log.error("Unspoken: could not install spatial speech; speech is unplaced", exc_info=True)
+
         _log_ancestor_coinstall()
         log.info(
             f"Unspoken-ng ready: {len(sounds)} slots, theme {_conf('theme')!r}, "
-            f"reverb {_conf('reverb')!r}, degraded={self._degraded}"
+            f"reverb {_conf('reverb')!r}, spatial speech {_conf('spatialSpeech')!r}, "
+            f"degraded={self._degraded}"
         )
 
     # ---------------------------------------------------------------- events
@@ -585,19 +637,40 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         goes through; an object event's sound only ever leads or stays
         silent. A missing rect falls back to the screen centre rather than
         dropping the sound -- position degrades, the sound does not.
+
+        An object event is always an arrival, so with spatial speech on the
+        same position also goes to the speech router -- even when no sound
+        plays, which is the one case this path reads `location` for a silent
+        verdict. It is still the one read.
         """
         try:
             slot = roles.slot_for(obj.role)
-            verdict = playback.decide(playback.ObjectEvent(slot=slot), _playback_config())
-            if verdict is playback.SILENT:
+            event = playback.ObjectEvent(slot=slot)
+            verdict = playback.decide(event, _playback_config())
+            places_speech = self._places_speech(event)
+            if verdict is playback.SILENT and not places_speech:
                 return
             location = obj.location
             desktop_rect = _desktop_rect()
-            self._player.play(
-                slot, spatial.position_for(_rect(location) or desktop_rect, desktop_rect)
-            )
+            position = spatial.position_for(_rect(location) or desktop_rect, desktop_rect)
+            if places_speech:
+                self._speech_router.position = position
+            if verdict is not playback.SILENT:
+                self._player.play(slot, position)
         except Exception:
             log.debugWarning("Unspoken: could not play a role sound", exc_info=True)
+
+    def _places_speech(self, event):
+        """Does this event move speech? An arrival, with spatial speech on.
+
+        Two ConfigObj lookups, and only `playback.is_arrival` decides what an
+        arrival is.
+        """
+        return (
+            self._speech_router is not None
+            and _conf("spatialSpeech") != "none"
+            and playback.is_arrival(event)
+        )
 
     # ------------------------------------------------- reading-path entry point
 
@@ -667,20 +740,28 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
         `self._player` is resolved at fire time deliberately: a callback that
         outlives `terminate` finds the `SilentSoundPlayer` and no-ops.
+
+        With spatial speech on, the field the navigation landed inside is an
+        arrival whether or not it has a sound -- quick-nav to a heading must
+        place the heading's speech -- so its position is read for the speech
+        router even on a silent verdict.
         """
         slot = roles.slot_for(attrs.get("role"))
-        verdict = playback.decide(
-            playback.ControlField(
-                reason=getattr(reason, "name", None),
-                field_type=fieldType,
-                slot=slot,
-                synth_reports_indexes=_synth_reports_indexes(),
-            ),
-            _playback_config(),
+        event = playback.ControlField(
+            reason=getattr(reason, "name", None),
+            field_type=fieldType,
+            slot=slot,
+            synth_reports_indexes=_synth_reports_indexes(),
         )
-        if verdict is playback.SILENT:
+        verdict = playback.decide(event, _playback_config())
+        places_speech = self._places_speech(event)
+        if verdict is playback.SILENT and not places_speech:
             return None
         position = self._reading_position(info, attrs)
+        if places_speech:
+            self._speech_router.position = position
+        if verdict is playback.SILENT:
+            return None
         if verdict is playback.LEAD:
             self._player.play(slot, position)
             return None
@@ -823,6 +904,15 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         except Exception:
             pass
         self._settings_panel = None
+
+        # Before the player: a synth mid-utterance on the HRTF route is moved
+        # back to nvwave's own methods before the stream under it goes away.
+        if self._speech_router is not None:
+            try:
+                self._speech_router.uninstall()
+            except Exception:
+                log.debugWarning("Unspoken: could not uninstall spatial speech", exc_info=True)
+            self._speech_router = None
 
         try:
             self._player.close()
