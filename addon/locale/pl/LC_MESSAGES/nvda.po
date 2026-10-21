@@ -8,7 +8,7 @@ msgstr ""
 "Project-Id-Version: Unspoken-ng 2.5\n"
 "Report-Msgid-Bugs-To: https://github.com/fastfinge/unspoken-ng/issues\n"
 "POT-Creation-Date: 2026-08-20 12:44+0000\n"
-"PO-Revision-Date: 2026-08-29 11:35+0200\n"
+"PO-Revision-Date: 2026-10-11 21:44+0200\n"
 "Last-Translator: DJ Graco\n"
 "Language-Team: \n"
 "Language: pl\n"
@@ -40,12 +40,12 @@ msgstr "Brak"
 #. Translators: A reverb preset: role sounds play as if in a small room.
 #: addon\globalPlugins\Unspoken\addonGui.py:40
 msgid "Small room"
-msgstr "Mały pokój"
+msgstr "Małe pomieszczenie"
 
 #. Translators: A reverb preset: role sounds play as if in a medium-sized room.
 #: addon\globalPlugins\Unspoken\addonGui.py:42
 msgid "Medium room"
-msgstr "Średni pokój"
+msgstr "Średnie pomieszczenie"
 
 #. Translators: A reverb preset: role sounds play as if in a hall.
 #: addon\globalPlugins\Unspoken\addonGui.py:44
@@ -63,7 +63,7 @@ msgstr "Motyw &dźwiękowy:"
 
 #: addon\globalPlugins\Unspoken\addonGui.py:158
 msgid "&Role announcement:"
-msgstr "&Ogłaszanie ról kontrolek:"
+msgstr "&Oznajmianie ról kontrolek:"
 
 #: addon\globalPlugins\Unspoken\addonGui.py:168
 msgid "Re&verb:"
@@ -76,13 +76,13 @@ msgstr "Głośność dźw&ięków:"
 #. Translators: The label of a checkbox to stop role sounds playing during say all.
 #: addon\globalPlugins\Unspoken\addonGui.py:195
 msgid "&Silence role sounds during say all"
-msgstr "&Wycisz dźwięki ról podczas funkcji „Czytaj wszystko”"
+msgstr "&Wycisz dźwięki ról kontrolek podczas „Czytaj wszystko”"
 
 #. Translators: Spoken and brailled once at startup when the addon
 #. cannot play sounds, so NVDA speaks control roles instead.
 #: addon\globalPlugins\Unspoken\__init__.py:776
 msgid "Unspoken: audio unavailable, speaking roles instead."
-msgstr "Unspoken: dźwięk jest niedostępny, role kontrolek będą odczytywane mową."
+msgstr "Unspoken: dźwięk jest niedostępny, role kontrolek będą oznajmiane mową."
 
 #. Translators: Summary for this add-on to be shown on installation and add-on information.
 #: buildVars.py:39
@@ -95,6 +95,5 @@ msgid ""
 "Adds 3D audio for controls and replaces control messages. This updated version "
 "uses OpenAL Soft and is only compatible with NVDA 2026.1 and later."
 msgstr ""
-"Dodaje dźwięk 3D dla kontrolek i zastępuje komunikaty o ich rolach dźwiękami. "
-"Ta zaktualizowana wersja korzysta z OpenAL Soft i wymaga NVDA 2026.1 lub "
-"nowszej wersji."
+"Dodaje dźwięk 3D dla kontrolek i zastępuje dźwiękami słowne komunikaty o ich "
+"rolach."
