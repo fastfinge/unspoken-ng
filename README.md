@@ -29,6 +29,7 @@ In the case of this project, I'm really just the releaser, documenter, and conta
 * Ambro86: maintaining modern Python bindings for synthizer, as well as contributing some code to unspoken
 * Tyler Spivey: for sitting down, figuring out steam audio, and creating Python bindings that do what we need
 * AKJ, for converting everything to OpenAL Soft
+* DJ Graco, for the Polish translation and the Polish user guide
 * Me: for really needing this functionality, doing what I could to keep it going, and bothering other people to help with all the hard bits
 
 ## Using the addon
@@ -51,6 +52,14 @@ Once installed, the addon adds an **Unspoken-ng** category under NVDA menu → P
 * **Silence role sounds during say all** — off by default. Turn it on if you find the sounds distracting while reading continuously.
 
 If the addon cannot produce sound at all — no audio device, or a broken install — it says so once, shortly after NVDA starts, and then runs speech-only for the session. Your settings are left alone, so fixing the problem restores sounds with nothing to set again.
+
+## Translations
+
+The addon ships in English and Polish. NVDA picks the language itself: run NVDA in Polish and the settings panel, the strings the addon speaks, the add-on's name and description in the Add-on Store and add-ons manager, and the guide behind the Help button are all Polish.
+
+*Polish: DJ Graco — interface strings and user guide.*
+
+If your language is not there yet, see **Translating** below. A translation is an ordinary gettext catalog plus, optionally, a translated copy of this guide, and getting it shipped is one pull request. The build picks up every catalog in `addon/locale` and every guide in `addon/doc` without any further wiring.
 
 ## Sound themes
 
@@ -109,6 +118,8 @@ Every user-visible string is gettext-wrapped, so translations are ordinary gette
 4. Optionally, translate the user guide: place a translated copy of this readme at `addon/doc/<language>/readme.md`.
 5. Open a pull request with the `.po` file (and translated readme, if any). Don't commit compiled `.mo` files or generated `manifest.ini` files — the build produces those, and git ignores them.
 
+Polish is a complete worked example of both: `addon/locale/pl/LC_MESSAGES/nvda.po` and `addon/doc/pl/readme.md`.
+
 To update an existing translation after strings change, merge the new catalog into it (`msgmerge --update nvda.po Unspoken-ng.pot`, or Poedit's "Update from POT file") and fill in what's new.
 
 ## Releasing
@@ -117,8 +128,9 @@ Publish a GitHub release whose tag is the bare version, no `v` prefix (e.g. `2.1
 
 ## Known Issues
 
-If you would like to fix any of these issues, pull requests will be happily and gratefully accepted:
-1. Translations exist in the code but not yet in practice: every user-visible string is gettext-wrapped and the build generates a `.pot` catalog, but no translation platform is wired up, so no translated catalogs ship yet. What remains is a place for translators to contribute (for instance the NVDA add-on community's translation workflow).
+None at present. If you find one, an [issue](https://github.com/fastfinge/unspoken-ng/issues) or a pull request will be happily and gratefully accepted.
+
+Fixed in 2.7: nothing shipped translated — every user-visible string was gettext-wrapped and the build generated a `.pot`, but no catalog was ever in the bundle, so the addon read as English everywhere. The Polish catalog and user guide now ship, and every catalog in `addon/locale` and guide in `addon/doc` goes into the bundle, so adding a language needs no build changes.
 
 Fixed in 2.0: Unspoken-ng used to play no sound while arrowing through some controls on the web, because a control's position was unavailable until focus moved to it and NVDA no longer moves system focus with the browse cursor. Browse-mode reading now has its own path and does not wait on focus.
 

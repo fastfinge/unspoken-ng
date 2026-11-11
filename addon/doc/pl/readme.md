@@ -31,6 +31,7 @@ W tym projekcie zajmuję się właściwie tylko publikowaniem wydań, dokumentac
 * Ambro86 — utrzymuje aktualne powiązania biblioteki synthizer z Pythonem, a także wniósł część kodu do Unspokena.
 * Tyler Spivey — poświęcił czas na rozpracowanie Steam Audio i stworzył powiązania z Pythonem, które zapewniają potrzebne nam funkcje.
 * AKJ — przeniósł całość na OpenAL Soft.
+* DJ Graco — polskie tłumaczenie i polski podręcznik użytkownika.
 * Ja — bardzo potrzebowałem tych funkcji, robiłem, co mogłem, aby projekt działał dalej, i prosiłem innych o pomoc przy wszystkich trudniejszych zadaniach.
 
 ## Korzystanie z dodatku
@@ -54,6 +55,14 @@ Po zainstalowaniu dodatek dodaje do okna ustawień NVDA kategorię **Unspoken-ng
 * **Wycisz dźwięki ról kontrolek podczas „Czytaj wszystko”** — domyślnie wyłączone. Włącz tę opcję, jeśli dźwięki rozpraszają Cię podczas ciągłego czytania.
 
 Jeśli dodatek w ogóle nie może odtwarzać dźwięków — z powodu braku urządzenia audio lub uszkodzonej instalacji — informuje o tym jednorazowo krótko po uruchomieniu NVDA, a następnie do końca sesji korzysta wyłącznie z mowy. Ustawienia pozostają zachowane, więc po usunięciu problemu dźwięki wrócą bez potrzeby ponownej konfiguracji.
+
+## Tłumaczenia
+
+Dodatek jest dostępny w języku angielskim i polskim. NVDA sam wybiera język: jeśli NVDA działa po polsku, okno ustawień dodatku, wypowiadane przez niego komunikaty, nazwa i opis dodatku w sklepie z dodatkami NVDA oraz w menedżerze dodatków, a także podręcznik otwierany przyciskiem Pomoc są po polsku.
+
+*Polski — DJ Graco: teksty interfejsu i podręcznik użytkownika.*
+
+Jeśli Twojego języka jeszcze nie ma, zobacz sekcję **Tłumaczenie** poniżej. Tłumaczenie to zwykły katalog gettext, a opcjonalnie także przetłumaczona kopia tego podręcznika; wystarczy jeden pull request, aby trafiło do wydania. Podczas budowania automatycznie dołączany jest każdy katalog z `addon/locale` i każdy podręcznik z `addon/doc`, bez dodatkowej konfiguracji.
 
 ## Motywy dźwiękowe
 
@@ -109,15 +118,17 @@ Wszystkie teksty widoczne dla użytkownika są objęte obsługą gettext, więc 
 
 Aby zaktualizować istniejące tłumaczenie po zmianie tekstów źródłowych, scal z nim nowy szablon za pomocą polecenia `msgmerge --update nvda.po Unspoken-ng.pot` lub opcji aktualizacji z pliku POT w Poedicie, a następnie uzupełnij nowe wpisy.
 
+Polski jest kompletnym przykładem obu tych plików: `addon/locale/pl/LC_MESSAGES/nvda.po` oraz `addon/doc/pl/readme.md`.
+
 ## Publikowanie wydań
 
 Opublikuj wydanie na GitHubie z tagiem zawierającym sam numer wersji, bez prefiksu `v` (np. `2.1`, zgodnie z konwencją `X.Y` stosowaną w sklepie z dodatkami NVDA) — to cały proces. Numer wersji dodatku jest ustalany podczas budowania na podstawie wyniku `git describe --tags`, więc to tag określa wersję. System ciągłej integracji (CI) ponownie buduje dodatek ze wskazanego tagu — po uprzednim uruchomieniu testów i weryfikacji artefaktów — a następnie dołącza plik `.nvda-addon` do wydania. Nie trzeba ręcznie zmieniać numeru wersji, budować dodatku ani przesyłać plików. Lokalne kompilacje tworzone między tagami otrzymują numer wersji w rodzaju `2.0-51-g3b71875`.
 
 ## Znane problemy
 
-Jeśli chcesz rozwiązać któryś z tych problemów, z przyjemnością i wdzięcznością przyjmę pull request:
+Obecnie brak. Jeśli jakiś znajdziesz, z przyjemnością i wdzięcznością przyjmę zgłoszenie lub pull request.
 
-1. Obsługa tłumaczeń istnieje w kodzie, ale nie jest jeszcze wykorzystywana w praktyce: wszystkie teksty widoczne dla użytkownika są objęte obsługą gettext, a podczas budowania generowany jest szablon `.pot`. Nie podłączono jednak żadnej platformy tłumaczeniowej, więc dodatek nie zawiera jeszcze przetłumaczonych katalogów. Brakuje miejsca, w którym tłumacze mogliby zgłaszać swoją pracę, na przykład za pośrednictwem procesu tłumaczeniowego społeczności dodatków NVDA.
+Naprawiono w wersji 2.7: dodatek nie zawierał żadnych tłumaczeń — wszystkie teksty widoczne dla użytkownika były objęte obsługą gettext, a podczas budowania powstawał szablon `.pot`, ale żaden katalog tłumaczeń nie trafiał do paczki dodatku, więc wszędzie wyświetlał się on po angielsku. Teraz razem z dodatkiem trafiają polski katalog tłumaczeń i polski podręcznik użytkownika, a każdy katalog z `addon/locale` i każdy podręcznik z `addon/doc` jest dołączany do paczki, więc dodanie języka nie wymaga zmian w procesie budowania.
 
 Naprawiono w wersji 2.0: Unspoken-ng nie odtwarzał dźwięku podczas przechodzenia strzałkami po niektórych kontrolkach w internecie. Położenie kontrolki było bowiem niedostępne, dopóki nie otrzymała ona fokusu, a NVDA nie przenosi już fokusu systemowego wraz z kursorem przeglądania. Czytanie w trybie przeglądania jest teraz obsługiwane osobno i nie wymaga przeniesienia fokusu.
 
